@@ -109,6 +109,7 @@ public final class AsyncPacketListener {
                         data.lastTeleportY = event.getPacket().getDoubles().read(1);
                         data.lastTeleportZ = event.getPacket().getDoubles().read(2);
                         data.lastTeleportTime = System.currentTimeMillis();
+                        data.shadow.reset(data.lastTeleportX, data.lastTeleportY, data.lastTeleportZ);
                     } catch (Exception ignored) {
                     }
                     return;
@@ -121,6 +122,10 @@ public final class AsyncPacketListener {
                 data.kbPreSpeed = data.movement.lastDistanceXZ;
                 data.lastKbTime = System.currentTimeMillis();
                 data.velocity.issue(packet.getIntegers().read(1) / 8000D, packet.getIntegers().read(2) / 8000D,
+                        packet.getIntegers().read(3) / 8000D);
+                data.shadow.injectVelocity(
+                        packet.getIntegers().read(1) / 8000D,
+                        packet.getIntegers().read(2) / 8000D,
                         packet.getIntegers().read(3) / 8000D);
                 if (manager.config().raw().getBoolean("settings.debug-velocity", false)) {
                     Bukkit.getConsoleSender().sendMessage("§8[YCBR-VEL] §7KB issued vx="
