@@ -1,6 +1,6 @@
 # YCBR AntiCheat
 
-为 Minecraft 1.8.9 Paper 服务器打造的反作弊插件，内置登录/注册认证、临时封禁与 DDoS 防护。
+为 Minecraft 1.8.9 Paper 服务器打造的轻量级反作弊插件，内置登录/注册认证、临时封禁与 DDoS 防护。
 
 ## 功能
 
