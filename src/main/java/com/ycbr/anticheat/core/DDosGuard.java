@@ -133,7 +133,13 @@ public final class DDosGuard {
                         || event.getPacketType() == PacketType.Status.Client.PING) {
                     statusPings++;
                 } else if (event.getPacketType() == PacketType.Login.Client.START) {
-                    onLoginStart(event.getPacket().getStrings().read(0));
+                    String name = null;
+                    try {
+                        name = event.getPacket().getGameProfiles().read(0).getName();
+                    } catch (Exception ignored) {}
+                    if (name != null) {
+                        onLoginStart(name);
+                    }
                 } else if (event.getPacketType() == PacketType.Login.Client.ENCRYPTION_BEGIN) {
                     onEncryptionBegin(event.getPacket());
                 }
