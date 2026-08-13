@@ -29,6 +29,7 @@ public final class MovementTracker {
     public double lastDistanceXZ;
     public double timeScale;
     public boolean onGround;
+    public boolean sprinting;
     public boolean jumpedThisTick;
     public boolean airborne;
     public int airTicks;

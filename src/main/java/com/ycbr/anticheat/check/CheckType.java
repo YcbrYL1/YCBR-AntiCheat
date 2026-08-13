@@ -20,7 +20,8 @@ public enum CheckType {
     FASTTHROW("FastThrow", "fastthrow"),
     INSTANTBOW("InstantBow", "instantbow"),
     FASTCLICK("FastClick", "fastclick"),
-    REACH("Reach", "reach");
+    REACH("Reach", "reach"),
+    SIMULATION("Simulation", "simulation");
 
     private final String display;
     private final String configPath;

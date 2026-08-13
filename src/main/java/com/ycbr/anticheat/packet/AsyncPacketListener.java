@@ -287,9 +287,11 @@ public final class AsyncPacketListener {
             long now = System.currentTimeMillis();
             if (fAction == 3) {
                 data.lastSprintStartTime = now;
+                data.movement.sprinting = true;
                 ((VelocityCheck) manager.getRegistry().get(CheckType.VELOCITY)).checkSprintReset(data, now);
             } else if (fAction == 4) {
                 data.lastSprintStopTime = now;
+                data.movement.sprinting = false;
             }
             if (fAction == 5) {
                 manager.getRegistry().onRidingJump(data, now);
