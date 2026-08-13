@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 
 import com.ycbr.anticheat.core.AntiCheatManager;
@@ -78,6 +79,8 @@ public final class BukkitListener implements Listener {
         PlayerData data = manager.getDataManager().get(player.getUniqueId());
         manager.getGhostManager().onJoin(player);
         data.joinedMillis = System.currentTimeMillis();
+        data.shadow.reset(player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ());
+        data.shadow.lastSyncTime = System.currentTimeMillis();
         com.ycbr.anticheat.core.AuthManager auth = manager.getAuthManager();
         boolean ok = !auth.enabled() || auth.isPremium(player.getName()) || manager.isYcbrOp(player.getName());
         if (!ok) {
@@ -98,6 +101,16 @@ public final class BukkitListener implements Listener {
             manager.getMainHandler().addAlert(player.getUniqueId());
         }
         manager.getBanManager().isBanned(player.getUniqueId()); // 利用其惰性删除过期记录并落盘
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onTeleport(PlayerTeleportEvent event) {
+        if (event.getTo() == null) return;
+        PlayerData data = manager.getDataManager().get(event.getPlayer().getUniqueId());
+        if (data != null) {
+            data.shadow.reset(event.getTo().getX(), event.getTo().getY(), event.getTo().getZ());
+            data.shadow.lastSyncTime = System.currentTimeMillis();
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)

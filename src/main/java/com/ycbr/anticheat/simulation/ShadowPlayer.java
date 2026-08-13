@@ -84,14 +84,21 @@ public final class ShadowPlayer {
      * Reset to origin (used on join / respawn).
      */
     public void reset() {
+        reset(0, 0, 0);
+    }
+
+    /**
+     * Reset to specific position (used on teleport / join).
+     */
+    public void reset(double x, double y, double z) {
         this.motionX = 0;
         this.motionY = 0;
         this.motionZ = 0;
         this.onGround = true;
         this.yaw = 0;
-        this.posX = 0;
-        this.posY = 0;
-        this.posZ = 0;
-        this.lastSyncTime = 0;
+        this.posX = x;
+        this.posY = y;
+        this.posZ = z;
+        this.lastSyncTime = System.currentTimeMillis();
     }
 }
