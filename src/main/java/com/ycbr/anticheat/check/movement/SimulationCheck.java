@@ -11,6 +11,9 @@ import com.ycbr.anticheat.simulation.ShadowPlayer;
 
 public final class SimulationCheck extends Check {
 
+    private static final long TICK_MS = 50L;
+    private static final int MAX_TICKS = 4;
+
     public SimulationCheck(AntiCheatManager manager) {
         super(CheckType.SIMULATION, manager);
     }
@@ -36,11 +39,22 @@ public final class SimulationCheck extends Check {
         boolean sneaking = false;
         double speedLevel = data.speedLevel;
         double jumpLevel = data.jumpLevel;
-        double potionLevel = 0;
 
-        PredictionEngine.Candidate[] cands = PredictionEngine.candidates(
-                shadow.motionX, shadow.motionZ, shadow.onGround, yaw,
-                frictionFactor, sprinting, speedLevel, jumpLevel);
+        long elapsed = ctx.arrivalTime - shadow.lastSyncTime;
+        if (elapsed < 0) elapsed = TICK_MS;
+        int ticks = (int) Math.min(MAX_TICKS, Math.max(1, Math.ceil((double) elapsed / TICK_MS)));
+
+        PredictionEngine.Candidate[] cands;
+        if (ticks > 1) {
+            cands = PredictionEngine.candidatesMultiTick(
+                    shadow.motionX, shadow.motionZ, shadow.motionY,
+                    shadow.onGround, yaw, frictionFactor,
+                    sprinting, speedLevel, jumpLevel, ticks);
+        } else {
+            cands = PredictionEngine.candidates(
+                    shadow.motionX, shadow.motionZ, shadow.onGround, yaw,
+                    frictionFactor, sprinting, speedLevel, jumpLevel);
+        }
 
         double actualDX = ctx.x - shadow.posX;
         double actualDY = ctx.y - shadow.posY;
@@ -48,6 +62,11 @@ public final class SimulationCheck extends Check {
 
         double hTol = sd("sim-speed.horizontal-tolerance", 0.03D, 0.01D);
         double vTol = sd("sim-fly.vertical-tolerance", 0.05D, 0.03D);
+
+        if (ticks > 1) {
+            hTol *= Math.sqrt(ticks);
+            vTol *= Math.sqrt(ticks);
+        }
 
         boolean hMatch = false;
         double bestHDist = Double.MAX_VALUE;
@@ -72,7 +91,8 @@ public final class SimulationCheck extends Check {
                 if (bump(data, "sim-speed", 1D, i("sim-speed.vl-before-flag", 8))) {
                     flag(data, "sim-speed",
                             "hDist=" + String.format("%.4f", bestHDist)
-                            + " tol=" + String.format("%.3f", hTol));
+                            + " tol=" + String.format("%.3f", hTol)
+                            + " ticks=" + ticks);
                 }
             } else {
                 drain(data, "sim-speed", 0.02D);
@@ -96,7 +116,8 @@ public final class SimulationCheck extends Check {
                 if (bump(data, "sim-fly", 1D, i("sim-fly.vl-before-flag", 10))) {
                     flag(data, "sim-fly",
                             "vDist=" + String.format("%.4f", bestVDist)
-                            + " tol=" + String.format("%.3f", vTol));
+                            + " tol=" + String.format("%.3f", vTol)
+                            + " ticks=" + ticks);
                 }
             } else {
                 drain(data, "sim-fly", 0.02D);
