@@ -76,4 +76,23 @@ class ShadowPlayerTest {
         assertEquals(1.0, sp.posZ);
         assertEquals(200L, sp.lastSyncTime);
     }
+
+    @Test
+    void sync_ignoresClientOnGroundWhenServerSaysAirborne() {
+        ShadowPlayer sp = new ShadowPlayer();
+        // 客户端谎报 onGround=true，但位置差显示仍在下降
+        sp.sync(0, 64.0, 0, 0.0, -0.4, 0.0, true, false, 0f, 100L);
+        // 下一 tick：motionY 继续 -0.4 → 证明 shadow 未被客户端 onGround 污染
+        sp.tick(0.6f, false, false, false, 0, 0, 0, false, false, false, false);
+        assertTrue(sp.motionY < -0.3, "motionY=" + sp.motionY);
+    }
+
+    @Test
+    void sync_trustsServerOnGroundWhenClientSaysAirborne() {
+        ShadowPlayer sp = new ShadowPlayer();
+        sp.sync(0, 64.0, 0, 0.0, 0.0, 0.0, false, true, 0f, 100L);
+        // 服务器判定贴地：跳起应产生正 motY
+        sp.tick(0.6f, false, true, false, 0, 0, 0, false, false, false, false);
+        assertTrue(sp.motionY > 0.3, "motionY=" + sp.motionY);
+    }
 }

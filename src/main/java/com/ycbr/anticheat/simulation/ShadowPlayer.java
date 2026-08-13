@@ -29,13 +29,24 @@ public final class ShadowPlayer {
      */
     public void sync(double x, double y, double z, double motX, double motY, double motZ,
                      boolean onGround, float yaw, long time) {
+        sync(x, y, z, motX, motY, motZ, onGround, onGround, yaw, time);
+    }
+
+    /**
+     * Full resync from server-side player state, trusting server onGround.
+     *
+     * @param clientOnGround onGround flag from the movement packet (untrusted)
+     * @param serverOnGround server-side ground determination (authoritative)
+     */
+    public void sync(double x, double y, double z, double motX, double motY, double motZ,
+                     boolean clientOnGround, boolean serverOnGround, float yaw, long time) {
         this.posX = x;
         this.posY = y;
         this.posZ = z;
         this.motionX = motX;
         this.motionY = motY;
         this.motionZ = motZ;
-        this.onGround = onGround;
+        this.onGround = serverOnGround; // trust server determination only
         this.yaw = yaw;
         this.lastSyncTime = time;
     }
@@ -71,12 +82,43 @@ public final class ShadowPlayer {
      */
     public void tick(float frictionFactor, boolean sprinting, boolean jumping, boolean sneaking,
                      double speedLevel, double jumpLevel, double potionLevel) {
+        tick(frictionFactor, sprinting, jumping, sneaking, speedLevel, jumpLevel, potionLevel,
+                false, false, false, false);
+    }
+
+    /**
+     * Advance shadow state with world-state modifiers.
+     * Horizontal motion from PredictionEngine; vertical motion keeps shadow's
+     * own motionY (gravity/drag applied here).
+     */
+    public void tick(float frictionFactor, boolean sprinting, boolean jumping, boolean sneaking,
+                     double speedLevel, double jumpLevel, double potionLevel,
+                     boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked) {
+        boolean jump = jumping && onGround;
         PredictionEngine.Result r = PredictionEngine.predictSingle(
                 motionX, motionZ, onGround, yaw, frictionFactor,
-                sprinting, jumping, sneaking, speedLevel, jumpLevel, potionLevel);
+                sprinting, jump, sneaking, speedLevel, jumpLevel, potionLevel,
+                inLiquid, inWeb, onLadder, headBlocked);
         this.motionX = r.deltaX;
         this.motionZ = r.deltaZ;
-        this.motionY = r.motionY;
+
+        double motY = this.motionY;
+        if (jump) {
+            motY = PredictionEngine.JUMP_VELOCITY + jumpLevel * 0.1;
+            if (headBlocked) {
+                motY = Math.min(motY, 0.3);
+            }
+        }
+        if (inWeb) {
+            motY *= 0.105;
+        } else if (inLiquid) {
+            motY = (motY - 0.02) * 0.8;
+        } else if (onLadder) {
+            motY = 0.15;
+        } else {
+            motY = (motY - PredictionEngine.GRAVITY) * PredictionEngine.VERTICAL_DRAG;
+        }
+        this.motionY = motY;
         this.onGround = false; // will be resynced from actual server state
     }
 
