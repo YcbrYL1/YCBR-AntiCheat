@@ -1247,3 +1247,50 @@ git push
 - **多 tick 预测**：高 ping 下一包多 tick 时，中间 tick 的跳跃/碰撞无法精确模拟，靠容差覆盖。若误判多，可降低 ticks 上限到 2。
 - **onGround 矛盾**：客户端声明 onGround 但 ΔY≠0 的情况（NoFall 场景），sim-fly 不处理，由 NoFallCheck 管。
 - **Velocity 注入时机**：需在 VelocityCheck 检测后、SimulationCheck 之前注入 shadow（确保顺序正确）。
+
+---
+
+## 实施结果
+
+### 提交记录
+
+| 任务 | Commit | 描述 |
+|------|--------|------|
+| 1 | `9437e18` | JUnit 5 基础设施 |
+| 2 | `58086bb` | PredictionEngine + 7 测试 |
+| 3-6 | `c74b7d7` | ShadowPlayer + SimulationCheck + sprinting + config |
+| 3-6 | `6f1407b` | config.yml force-add |
+| 7 | `0b94a2c` | ShadowPlayer resync (teleport/velocity/join) |
+| 8 | `230aeb0` | Multi-tick prediction in SimulationCheck |
+
+### 测试结果
+
+- **12/12 测试全部通过**（PredictionEngine 7 + ShadowPlayer 5）
+- `mvn package -DskipTests` 构建成功
+
+### 新增/修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `simulation/PredictionEngine.java` | **新建** — 纯 Java 1.8.8 物理引擎（predictSingle/candidates/candidatesMultiTick） |
+| `simulation/ShadowPlayer.java` | **新建** — 每玩家影子状态（sync/reset/injectVelocity/tick） |
+| `check/movement/SimulationCheck.java` | **新建** — sim-speed + sim-fly 检测（含多 tick 支持） |
+| `check/CheckType.java` | **修改** — 添加 SIMULATION |
+| `check/CheckRegistry.java` | **修改** — 注册 SimulationCheck |
+| `data/PlayerData.java` | **修改** — 添加 shadow 字段 |
+| `data/MovementTracker.java` | **修改** — 添加 sprinting 字段 |
+| `packet/AsyncPacketListener.java` | **修改** — teleport resync + velocity injection + sprinting 设置 |
+| `listener/BukkitListener.java` | **修改** — join/teleport shadow reset |
+| `config.yml` | **修改** — simulation 配置段（默认关闭） |
+| `test/.../PredictionEngineTest.java` | **新建** — 7 个测试 |
+| `test/.../ShadowPlayerTest.java` | **新建** — 5 个测试 |
+
+### 部署状态
+
+- Jar 已构建：`target/YCBR-AC-1.0-SNAPSHOT.jar`
+- **部署由用户稍后手动执行**
+- 部署步骤：
+  1. 删除服务器 `plugins/YCBR/config.yml`
+  2. 复制新 jar 到 `plugins/YCBR.jar`
+  3. 重启服务器（plugin.yml 有变更）
+  4. 在 config.yml 中启用 `simulation.enabled: true` 和 `simulation.sim-speed.enabled: true`
