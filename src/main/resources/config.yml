@@ -273,16 +273,17 @@ checks:
     enabled: false
     sim-speed:
       enabled: false
-      horizontal-tolerance: 0.03
+      horizontal-tolerance: 0.01
+      liquid-tolerance-multiplier: 2.0
       vl-before-flag: 8
       strict:
-        horizontal-tolerance: 0.01
+        horizontal-tolerance: 0.005
     sim-fly:
       enabled: false
-      vertical-tolerance: 0.05
+      vertical-tolerance: 0.02
       vl-before-flag: 10
       strict:
-        vertical-tolerance: 0.03
+        vertical-tolerance: 0.01
   fly:
     enabled: true
     kick-at-vl: 20

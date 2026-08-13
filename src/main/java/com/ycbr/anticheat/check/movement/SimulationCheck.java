@@ -8,6 +8,7 @@ import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.simulation.PredictionEngine;
 import com.ycbr.anticheat.simulation.ShadowPlayer;
+import com.ycbr.anticheat.simulation.WorldProbe;
 
 public final class SimulationCheck extends Check {
 
@@ -28,13 +29,11 @@ public final class SimulationCheck extends Check {
             return;
         }
         MovementTracker m = data.movement;
-        if (m.nearLiquidTicks > 0 || m.inWebTicks > 0 || m.ladderTicks > 0) {
-            return;
-        }
 
         ShadowPlayer shadow = data.shadow;
         float yaw = (float) ctx.yaw;
-        double frictionFactor = getFrictionFactor(data);
+        WorldProbe.ProbeResult probe = WorldProbe.fromPlayerData(data);
+        double frictionFactor = probe.surface.friction;
         boolean sprinting = m.sprinting;
         boolean sneaking = false;
         double speedLevel = data.speedLevel;
@@ -49,19 +48,27 @@ public final class SimulationCheck extends Check {
             cands = PredictionEngine.candidatesMultiTick(
                     shadow.motionX, shadow.motionZ, shadow.motionY,
                     shadow.onGround, yaw, frictionFactor,
-                    sprinting, speedLevel, jumpLevel, ticks);
+                    sprinting, speedLevel, jumpLevel, ticks,
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked);
         } else {
             cands = PredictionEngine.candidates(
                     shadow.motionX, shadow.motionZ, shadow.onGround, yaw,
-                    frictionFactor, sprinting, speedLevel, jumpLevel);
+                    frictionFactor, sprinting, speedLevel, jumpLevel,
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked);
         }
 
         double actualDX = ctx.x - shadow.posX;
         double actualDY = ctx.y - shadow.posY;
         double actualDZ = ctx.z - shadow.posZ;
 
-        double hTol = sd("sim-speed.horizontal-tolerance", 0.03D, 0.01D);
-        double vTol = sd("sim-fly.vertical-tolerance", 0.05D, 0.03D);
+        double hTol = sd("sim-speed.horizontal-tolerance", 0.01D, 0.005D);
+        double vTol = sd("sim-fly.vertical-tolerance", 0.02D, 0.01D);
+
+        // 液体/网/梯子预测精度下降：容差放大，防误判
+        if (probe.inLiquid || probe.inWeb || probe.onLadder) {
+            hTol *= sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
+            vTol *= sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
+        }
 
         if (ticks > 1) {
             hTol *= Math.sqrt(ticks);
@@ -124,16 +131,18 @@ public final class SimulationCheck extends Check {
             }
         }
 
-        resyncShadow(shadow, ctx, yaw, frictionFactor, sprinting, sneaking,
+        resyncShadow(shadow, ctx, yaw, probe, sprinting, sneaking,
                 speedLevel, jumpLevel);
     }
 
     private void resyncShadow(ShadowPlayer shadow, MoveContext ctx, float yaw,
-            double frictionFactor, boolean sprinting, boolean sneaking,
+            WorldProbe.ProbeResult probe, boolean sprinting, boolean sneaking,
             double speedLevel, double jumpLevel) {
+        boolean serverGround = probe.surface != WorldProbe.Surface.AIR
+                && Math.abs(ctx.y - shadow.posY) < 0.001D;
         shadow.sync(ctx.x, ctx.y, ctx.z,
                 ctx.x - shadow.posX, ctx.y - shadow.posY, ctx.z - shadow.posZ,
-                ctx.data.movement.onGround, yaw, ctx.arrivalTime);
+                ctx.data.movement.onGround, serverGround, yaw, ctx.arrivalTime);
     }
 
     private double getFrictionFactor(PlayerData data) {

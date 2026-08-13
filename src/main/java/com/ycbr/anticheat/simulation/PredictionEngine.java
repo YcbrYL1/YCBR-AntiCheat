@@ -282,14 +282,33 @@ public final class PredictionEngine {
             double motionX, double motionZ, double motionY,
             boolean onGround, float yaw, double frictionFactor,
             boolean sprinting, double speedLevel, double jumpLevel, int ticks) {
+        return candidatesMultiTick(motionX, motionZ, motionY, onGround, yaw, frictionFactor,
+                sprinting, speedLevel, jumpLevel, ticks, false, false, false, false);
+    }
+
+    /**
+     * Multi-tick candidate prediction with world-state modifiers.
+     */
+    public static Candidate[] candidatesMultiTick(
+            double motionX, double motionZ, double motionY,
+            boolean onGround, float yaw, double frictionFactor,
+            boolean sprinting, double speedLevel, double jumpLevel, int ticks,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked) {
 
         if (ticks <= 1) {
-            return candidates(motionX, motionZ, onGround, yaw, frictionFactor, sprinting, speedLevel, jumpLevel);
+            return candidates(motionX, motionZ, onGround, yaw, frictionFactor, sprinting,
+                    speedLevel, jumpLevel, inLiquid, inWeb, onLadder, headBlocked);
         }
 
         List<Candidate> list = new ArrayList<Candidate>();
         double[] speedFactors = {1.0, SPRINT_MODIFIER, 0.3};
         String[] speedLabels = {"walk", "sprint", "sneak"};
+
+        double gravity = inWeb || inLiquid ? 0.02 : GRAVITY;
+        double vDrag = inLiquid ? 0.8 : VERTICAL_DRAG;
+        double hFriction = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+        if (inWeb) hFriction = 0.6;
+        if (inLiquid) hFriction = 0.8;
 
         for (int s = 0; s < speedFactors.length; s++) {
             for (int jumpAttempt = 0; jumpAttempt <= 1; jumpAttempt++) {
@@ -304,23 +323,26 @@ public final class PredictionEngine {
                 boolean ground = onGround;
 
                 for (int t = 0; t < ticks; t++) {
-                    if (t == 0 && jumpOnTick0) {
+                    if (t == 0 && jumpOnTick0 && !inLiquid) {
                         motY = JUMP_VELOCITY + jumpLevel * 0.1;
+                        if (headBlocked) {
+                            motY = Math.min(motY, 0.3);
+                        }
                         double rad = yaw * Math.PI / 180.0;
                         motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
                         motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
                         ground = false;
                     }
 
-                    double f5 = ground ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+                    double f5 = ground ? hFriction : AIR_FRICTION;
                     double f6 = ACCEL_FACTOR / (f5 * f5 * f5);
 
                     double baseSpeed = BASE_SPEED;
                     if (sprinting) baseSpeed *= SPRINT_MODIFIER;
                     if (speedLevel > 0) baseSpeed *= 1.0 + 0.2 * speedLevel;
 
-                    double inputSpeed = ground ? baseSpeed * f6 : AIR_ACCEL;
-                    inputSpeed *= speedFactors[s];
+                    double inputSpeed = inLiquid ? baseSpeed * 0.4 * speedFactors[s]
+                            : (ground ? baseSpeed * f6 : AIR_ACCEL) * speedFactors[s];
 
                     double fwd = 1.0;
                     double f3 = Math.max(1.0, Math.sqrt(fwd * fwd));
@@ -330,17 +352,25 @@ public final class PredictionEngine {
                     motX += fwd * f3 * cosYaw;
                     motZ += fwd * f3 * sinYaw;
 
+                    if (inWeb) {
+                        motX *= 0.105;
+                        motY *= 0.105;
+                        motZ *= 0.105;
+                    }
+
                     totalDX += motX;
                     totalDZ += motZ;
                     totalDY += motY;
 
-                    if (t == 0 && jumpOnTick0) {
+                    if (onLadder) {
+                        motY = 0.15;
+                    } else if (t == 0 && jumpOnTick0 && !inLiquid) {
                         // motY already set above
                     } else if (ground) {
                         motY = 0.0;
                     }
-                    motY -= GRAVITY;
-                    motY *= VERTICAL_DRAG;
+                    motY -= gravity;
+                    motY *= vDrag;
                     motX *= f5;
                     motZ *= f5;
                     ground = false;
