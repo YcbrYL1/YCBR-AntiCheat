@@ -1,0 +1,23 @@
+# Build output
+target/
+*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Runtime data (contains hashes/IPs, generated on server)
+accounts.yml
+sessions.yml
+botchecks.yml
+bans.yml
+config.yml
