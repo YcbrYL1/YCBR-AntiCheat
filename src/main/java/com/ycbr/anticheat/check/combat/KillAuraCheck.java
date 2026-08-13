@@ -1,0 +1,802 @@
+package com.ycbr.anticheat.check.combat;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import com.ycbr.anticheat.check.Check;
+import com.ycbr.anticheat.check.CheckType;
+import com.ycbr.anticheat.core.AntiCheatManager;
+import com.ycbr.anticheat.data.PlayerData;
+import com.ycbr.anticheat.data.MovementTracker;
+import com.ycbr.anticheat.data.context.AttackContext;
+import com.ycbr.anticheat.data.context.MoveContext;
+import com.ycbr.anticheat.snapshot.EntitySnapshot;
+import com.ycbr.anticheat.util.MathUtil;
+import com.ycbr.anticheat.util.NmsUtil;
+
+public final class KillAuraCheck extends Check {
+
+    private static final double EYE_STANDING = 1.62D;
+    private static final double EYE_SNEAKING = 1.54D;
+
+    public KillAuraCheck(AntiCheatManager manager) {
+        super(CheckType.KILLAURA, manager);
+    }
+
+    @Override
+    protected void onMove(MoveContext ctx) {
+        if (!isEnabled()) {
+            return;
+        }
+        if (ctx.data.attackTight) {
+            checkPost(ctx.data, System.currentTimeMillis());
+        }
+        checkAimStep(ctx);
+    }
+
+    @Override
+    protected void onClientCommand(PlayerData data, int action) {
+        if (!isEnabled() || action != 2) {
+            return;
+        }
+        if (!isSubEnabled("inventorycombo")) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (data.lastAttackTime > 0L && now - data.lastAttackTime <= si("inventorycombo.attack-window-ms", 100, 150)
+                && data.positionCount == data.lastAttackPositionCount) {
+            if (bump(data, "inventorycombo", 1D, i("inventorycombo.vl-before-flag", 1))) {
+                flag(data, "InventoryCombo", "attacked while opening inventory");
+            }
+        }
+    }
+
+    private void checkAimStep(MoveContext ctx) {
+        PlayerData data = ctx.data;
+        if (data.creative || data.flying || data.inVehicle || data.ping > cfg.maxPing()) {
+            data.hasPrevRotation = false;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - data.lastAttackTime > 3500L) {
+            if (!data.aimDeltas.isEmpty()) {
+                data.aimDeltas.clear();
+                data.aimPitchDeltas.clear();
+            }
+            data.pendingReversalTime = 0L;
+        } else {
+            double dY = Math.abs(MathUtil.normalizeYaw(ctx.yaw - data.prevYaw));
+            double dP = Math.abs(ctx.pitch - data.prevPitch);
+            data.lastYawDelta = MathUtil.normalizeYaw(ctx.yaw - data.prevYaw);
+            if (isSubEnabled("gcd") || isSubEnabled("gcdgrid") || isSubEnabled("conststep")
+                    || isSubEnabled("axisasym")) {
+                if (dY > 0.1D && dY < 30D && dP < 30D) {
+                    data.aimDeltas.add(dY);
+                    data.aimPitchDeltas.add(dP);
+                    if (data.aimDeltas.size() > 40) {
+                        data.aimDeltas.remove(0);
+                        data.aimPitchDeltas.remove(0);
+                    }
+                }
+            }
+            if (dY > d("bigrot.min-turn-degrees", 60D) && dY <= 180D) {
+                data.bigRotQueue.add(now);
+                long window = i("bigrot.window-ms", 800);
+                while (!data.bigRotQueue.isEmpty()
+                        && now - data.bigRotQueue.get(0) > window) {
+                    data.bigRotQueue.remove(0);
+                }
+            }
+            if (isSubEnabled("gcd") || isSubEnabled("gcdgrid")) {
+                checkGcd(data);
+            }
+            if (isSubEnabled("conststep")) {
+                checkConstStep(data);
+            }
+            if (isSubEnabled("axisasym")) {
+                checkAxisAsym(data);
+            }
+            checkBigRot(data);
+        }
+        if (!data.hasPrevRotation) {
+            data.prevYaw = ctx.yaw;
+            data.prevPitch = ctx.pitch;
+            data.hasPrevRotation = true;
+            return;
+        }
+        double rawDelta = MathUtil.normalizeYaw(ctx.yaw - data.prevYaw);
+        if (isSubEnabled("modulo360") && data.ping <= i("modulo360.max-ping", 150)
+                && now - data.lastAttackTime <= 3500L
+                && Math.abs(rawDelta) > 170D && Math.abs(data.lastYawDelta) < 30D) {
+            if (++data.modulo360Streak >= si("modulo360.min-streak", 2, 1)) {
+                data.modulo360Streak = 0;
+                if (bump(data, "modulo360", 1D, i("modulo360.vl-before-flag", 2))) {
+                    flag(data, "AimModulo360", "yaw snap " + MathUtil.round(rawDelta, 1));
+                }
+            }
+        } else {
+            data.modulo360Streak = 0;
+        }
+        if (!isSubEnabled("aimstep")) {
+            data.prevYaw = ctx.yaw;
+            data.prevPitch = ctx.pitch;
+            return;
+        }
+        double dYaw = Math.abs(MathUtil.normalizeYaw(ctx.yaw - data.prevYaw));
+        double dPitch = Math.abs(ctx.pitch - data.prevPitch);
+        double noDelta = d("aimstep.max-no-delta", 0.00001D);
+        double stepDelta = d("aimstep.min-step-delta", 20D);
+        if (dPitch < noDelta && (ctx.pitch == 90F || ctx.pitch == -90F)) {
+            dYaw = 0D;
+        }
+        if (dYaw >= 90D || dPitch >= 90D) {
+            data.prevYaw = ctx.yaw;
+            data.prevPitch = ctx.pitch;
+            return;
+        }
+        boolean step = (dYaw < noDelta && dPitch > stepDelta) || (dPitch < noDelta && dYaw > stepDelta);
+        if (step) {
+            if (++data.aimStepStreak >= (isStrict() ? 2 : 3)) {
+                if (bump(data, "aimstep", 1D, i("aimstep.vl-before-flag", 8))) {
+                    flag(data, "AimStep", "dYaw=" + MathUtil.round(dYaw, 4) + " dPitch=" + MathUtil.round(dPitch, 2));
+                }
+            }
+        } else {
+            data.aimStepStreak = 0;
+            drain(data, "aimstep", 0.05D);
+        }
+        data.prevYaw = ctx.yaw;
+        data.prevPitch = ctx.pitch;
+    }
+
+    private void checkGcd(PlayerData data) {
+        List<Double> deltas = data.aimDeltas;
+        if (deltas.size() < 2) return;
+        double last = deltas.get(deltas.size() - 1);
+        double prev = deltas.get(deltas.size() - 2);
+        long g = MathUtil.gcd((long) (last * MathUtil.EXPANDER), (long) (prev * MathUtil.EXPANDER));
+        if (isSubEnabled("gcd") && g > 0L && g < 131072L && MathUtil.stdDev(deltas) < 0.25D) {
+            if (++data.gcdStreak >= (isStrict() ? 3 : 6) && MathUtil.mean(deltas) > 1D) {
+                if (bump(data, "gcd", 1D, i("gcd.vl-before-flag", 6))) {
+                    flag(data, "GcdStable", "gcd=" + MathUtil.round(g / MathUtil.EXPANDER, 5) + " streak=" + data.gcdStreak);
+                }
+            }
+        } else {
+            data.gcdStreak = 0;
+            drain(data, "gcd", 0.05D);
+        }
+        if (g > 0L) {
+            data.gcdBucket.add(g);
+            if (data.gcdBucket.size() > 80) {
+                data.gcdBucket.remove(0);
+            }
+        }
+        if (isSubEnabled("gcdgrid") && data.gcdBucket.size() >= 20) {
+            long[] mc = MathUtil.modeCount(data.gcdBucket);
+            long mode = mc[0];
+            int count = (int) mc[1];
+            if (mode > 0L && count >= 15 && count * 100 / data.gcdBucket.size() >= 30) {
+                double modeDeg = mode / MathUtil.EXPANDER;
+                if (modeDeg < 0.0005D || modeDeg > 1.0D) {
+                    drain(data, "gcdgrid", 0.05D);
+                    return;
+                }
+                int n = Math.min(10, deltas.size());
+                if (n >= 5) {
+                    int aligned = 0;
+                    java.util.Set<Long> dots = new java.util.HashSet<Long>();
+                    for (int k = deltas.size() - n; k < deltas.size(); k++) {
+                        long d = (long) (deltas.get(k) * MathUtil.EXPANDER);
+                        long q = Math.round((double) d / mode);
+                        if (Math.abs(d - q * mode) <= mode / 8L) {
+                            aligned++;
+                            dots.add(q);
+                        }
+                    }
+                    if (aligned >= n - 1 && dots.size() >= 3) {
+                        if (bump(data, "gcdgrid", 1D, i("gcdgrid.vl-before-flag", 6))) {
+                            flag(data, "GcdGrid", "mode=" + MathUtil.round(modeDeg, 5)
+                                    + " aligned=" + aligned + "/" + n + " dots=" + dots.size());
+                        }
+                    } else {
+                        drain(data, "gcdgrid", 0.05D);
+                    }
+                }
+            }
+        }
+    }
+
+    private void checkConstStep(PlayerData data) {
+        List<Double> deltas = data.aimDeltas;
+        if (deltas.size() >= (isStrict() ? 10 : 20) && MathUtil.stdDev(deltas) < 0.05D && MathUtil.mean(deltas) > 1D) {
+            if (bump(data, "conststep", 1D, i("conststep.vl-before-flag", 6))) {
+                flag(data, "ConstStep", "std=" + MathUtil.round(MathUtil.stdDev(deltas), 4) + " n=" + deltas.size());
+            }
+        } else {
+            drain(data, "conststep", 0.05D);
+        }
+    }
+
+    private void checkAxisAsym(PlayerData data) {
+        List<Double> deltas = data.aimDeltas;
+        List<Double> pitches = data.aimPitchDeltas;
+        if (deltas.size() < (isStrict() ? 6 : 10)) return;
+        double varYaw = MathUtil.variance(deltas);
+        double varPitch = MathUtil.variance(pitches);
+        double varMax = d("axisasym.var-max", 0.05D);
+        double varMin = d("axisasym.var-min", 20D);
+        if ((varYaw < varMax && varPitch > varMin) || (varPitch < varMax && varYaw > varMin)) {
+            if (bump(data, "axisasym", 1D, i("axisasym.vl-before-flag", 6))) {
+                flag(data, "AxisAsym", "varYaw=" + MathUtil.round(varYaw, 2) + " varPitch=" + MathUtil.round(varPitch, 2));
+            }
+        } else {
+            drain(data, "axisasym", 0.05D);
+        }
+    }
+
+    private void checkBigRot(PlayerData data) {
+        if (!isSubEnabled("bigrot")) {
+            return;
+        }
+        List<Long> queue = data.bigRotQueue;
+        int min = si("bigrot.min-turns", 5, 3);
+        if (queue.size() < min) {
+            return;
+        }
+        if (bump(data, "bigrot", 1D, i("bigrot.vl-before-flag", 3))) {
+            flag(data, "BigRot", "large turns=" + queue.size()
+                    + " in " + i("bigrot.window-ms", 800) + "ms");
+        }
+    }
+
+    @Override
+    protected void onAttack(AttackContext ctx) {
+        if (!isEnabled()) {
+            return;
+        }
+        PlayerData data = ctx.data;
+        if (ctx.targetId == ctx.playerEntityId) {
+            if (isSubEnabled("selfinteract")
+                    && bump(data, "selfinteract", 1D, i("selfinteract.vl-before-flag", 1))) {
+                flag(data, "SelfInteract", "attacked self");
+            }
+            return;
+        }
+        long atkNow = System.currentTimeMillis();
+        checkAutoBlock(data, atkNow);
+        checkPostAttack(data, atkNow);
+        checkSwitch(data, atkNow, ctx.targetId);
+        if (data.creative || data.inVehicle || data.ping > cfg.maxPing()) {
+            return;
+        }
+        if (!data.movement.initialized) {
+            return;
+        }
+
+        EntitySnapshot target = manager.getEntitySnapshots().get(ctx.targetId);
+        if (target != null) {
+            checkReach(ctx, target);
+            checkThroughWalls(ctx, target);
+        }
+        long now2 = System.currentTimeMillis();
+        long prevGap = data.lastAttackTime > 0L ? now2 - data.lastAttackTime : Long.MAX_VALUE;
+        data.pendingAngleTargets.add(new Long[] { (long) ctx.targetId, now2, (long) (data.lastYaw * 1000D) });
+        while (!data.pendingAngleTargets.isEmpty() && now2 - data.pendingAngleTargets.get(0)[1] > 400L) {
+            data.pendingAngleTargets.remove(0);
+        }
+        checkCps(ctx);
+        long now3 = System.currentTimeMillis();
+        if (data.lastAttackTime > 0L) {
+            long gap = now3 - data.lastAttackTime;
+            if (gap > 0L && gap < 2000L) {
+                data.attackIntervals.add(gap);
+                if (data.attackIntervals.size() > 24) {
+                    data.attackIntervals.remove(0);
+                }
+            }
+        }
+        data.lastAttackTime = now3;
+        checkNoSwing(data, now3, prevGap);
+        checkNoSwingSame(data, now3, prevGap);
+        checkMultiInteract(data, now3, ctx.targetId);
+        data.targetHistory.add(new Long[] { now3, (long) ctx.targetId, (long) (data.lastYaw * 1000D) });
+        while (!data.targetHistory.isEmpty() && now3 - data.targetHistory.get(0)[0] > 3000L) {
+            data.targetHistory.remove(0);
+        }
+        checkMultiTarget(data, now3);
+        checkInterval(data);
+    }
+
+    private void checkAutoBlock(PlayerData data, long now) {
+        if (!isSubEnabled("autoblock")) {
+            return;
+        }
+        if (data.usingItem) {
+            return;
+        }
+        if (!data.digging) {
+            return;
+        }
+        if (now - data.lastDigStartTime < i("autoblock.dig-exempt-ms", 200)) {
+            return;
+        }
+        if (bump(data, "autoblock", 1D, i("autoblock.vl-before-flag", 1))) {
+            flag(data, "AutoBlock", "attack while digging");
+        }
+    }
+
+    private void checkPostAttack(PlayerData data, long now) {
+        if (!isSubEnabled("post")) {
+            return;
+        }
+        if (data.lastPacketTime > 0L && now - data.lastPacketTime < 10L) {
+            data.attackTight = true;
+            data.attackTightTime = now;
+        }
+    }
+
+    private void checkPost(PlayerData data, long now) {
+        if (!isSubEnabled("post")) {
+            data.attackTight = false;
+            return;
+        }
+        if (data.ping > si("post.max-ping", 150, 120)) {
+            data.attackTight = false;
+            return;
+        }
+        if (manager.getMainHandler().getTps() < d("post.tps-exempt", 15D)) {
+            data.attackTight = false;
+            return;
+        }
+        MovementTracker m = data.movement;
+        if (m.distanceXZ < 0.02D && m.lastDistanceXZ < 0.02D) {
+            data.attackTight = false;
+            drain(data, "post", 0.05D);
+            return;
+        }
+        long elapsed = now - data.attackTightTime;
+        data.attackTight = false;
+        if (elapsed >= si("post.min-gap-ms", 40, 45) && elapsed <= si("post.max-gap-ms", 100, 90)) {
+            drain(data, "post", 0.05D);
+            return;
+        }
+        if (bump(data, "post", 1D, i("post.vl-before-flag", 3))) {
+            flag(data, "Post", "no position gap after attack " + elapsed + "ms");
+        }
+    }
+
+    private void checkSwitch(PlayerData data, long now, int targetId) {
+        if (!isSubEnabled("switch")) {
+            return;
+        }
+        long switchMs = Long.MAX_VALUE;
+        if (data.lastAttackTargetId != 0 && data.lastAttackTargetId != targetId) {
+            if (data.lastTargetSwitchTime > 0L) {
+                switchMs = now - data.lastTargetSwitchTime;
+            }
+            data.lastTargetSwitchTime = now;
+        }
+        data.switchAttackCount++;
+        if (data.useEntityCount > i("switch.ratio-reset", 40)) {
+            data.useEntityCount = 0;
+            data.switchAttackCount = 0;
+            return;
+        }
+        if (data.switchAttackCount < si("switch.min-samples", 20, 10)) {
+            return;
+        }
+        double ratio = data.switchAttackCount / (double) data.useEntityCount;
+        if (ratio <= sd("switch.min-ratio", 0.85D, 0.75D)) {
+            return;
+        }
+        if (switchMs > i("switch.window-ms", 5)) {
+            return;
+        }
+        if (!data.hasPrevRotation) {
+            return;
+        }
+        double yawRate = Math.abs(MathUtil.normalizeYaw(data.lastYaw - data.prevYaw));
+        if (yawRate <= d("switch.min-yaw-rate", 15D)) {
+            return;
+        }
+        if (bump(data, "switch", 1D, i("switch.vl-before-flag", 2))) {
+            flag(data, "Switch", "target switch " + switchMs + "ms ratio=" + MathUtil.round(ratio, 2));
+        }
+    }
+
+    private void checkNoSwing(PlayerData data, long now, long prevGap) {
+        if (!isSubEnabled("noswing")) {
+            return;
+        }
+        long window = si("noswing.window-ms", 400, 300);
+        if (prevGap > 500L) {
+            drain(data, "noswing", 0.05D);
+            return;
+        }
+        if (data.lastSwingTime > 0L && now - data.lastSwingTime <= window) {
+            drain(data, "noswing", 0.05D);
+            return;
+        }
+        if (bump(data, "noswing", 1D, i("noswing.vl-before-flag", 3))) {
+            flag(data, "NoSwing", "attack without animation");
+        }
+    }
+
+    private void checkNoSwingSame(PlayerData data, long now, long prevGap) {
+        if (!isSubEnabled("noswingsame")) {
+            return;
+        }
+        if (prevGap > 500L) {
+            drain(data, "noswingsame", 0.05D);
+            return;
+        }
+        if (data.lastSwingPositionCount == data.positionCount) {
+            drain(data, "noswingsame", 0.05D);
+            return;
+        }
+        if (data.lastSwingTime > 0L && now - data.lastSwingTime <= 120L) {
+            drain(data, "noswingsame", 0.05D);
+            return;
+        }
+        if (bump(data, "noswingsame", 1D, i("noswingsame.vl-before-flag", 2))) {
+            flag(data, "NoSwing", "no swing in same packet batch");
+        }
+    }
+
+    private void checkMultiInteract(PlayerData data, long now, int targetId) {
+        if (!isSubEnabled("multiinteract")) {
+            return;
+        }
+        if (now - data.lastAttackTime > 1000L) {
+            drain(data, "multiinteract", 0.1D);
+        } else if (data.lastAttackTargetId != 0 && data.lastAttackTargetId != targetId
+                && now - data.lastAttackTime <= i("multiinteract.max-gap-ms", 100)
+                && data.positionCount == data.lastAttackPositionCount) {
+            if (bump(data, "multiinteract", 1D, i("multiinteract.vl-before-flag", 2))) {
+                flag(data, "MultiInteract", "two targets without position packet");
+            }
+        } else {
+            drain(data, "multiinteract", 0.1D);
+        }
+        data.lastAttackTargetId = targetId;
+        data.lastAttackPositionCount = data.positionCount;
+    }
+
+    private void checkInterval(PlayerData data) {
+        if (!isSubEnabled("interval")) {
+            return;
+        }
+        List<Long> gaps = data.attackIntervals;
+        if (gaps.size() < 20) return;
+        List<Double> values = new ArrayList<Double>();
+        for (long g : gaps) values.add((double) g);
+        double mean = MathUtil.mean(values);
+        if (mean <= 150D) {
+            drain(data, "interval", 0.05D);
+            return;
+        }
+        double cv = MathUtil.stdDev(values) / mean;
+        if (cv < sd("interval.max-cv", 0.1D, 0.05D)) {
+            if (bump(data, "interval", 1D, i("interval.vl-before-flag", 5))) {
+                flag(data, "Interval", "cv=" + MathUtil.round(cv, 3) + " n=" + gaps.size());
+            }
+        } else {
+            drain(data, "interval", 0.05D);
+        }
+    }
+
+    private void checkMultiTarget(PlayerData data, long now) {
+        if (!isSubEnabled("multitarget")) {
+            return;
+        }
+        List<Long[]> hist = data.targetHistory;
+        if (hist.size() < 4) {
+            return;
+        }
+        Set<Long> targets = new HashSet<Long>();
+        double span = 0D;
+        double prevYaw = hist.get(0)[2] / 1000D;
+        for (int k = 1; k < hist.size(); k++) {
+            double y = hist.get(k)[2] / 1000D;
+            span += Math.abs(MathUtil.normalizeYaw(y - prevYaw));
+            prevYaw = y;
+        }
+        for (Long[] h : hist) {
+            targets.add(h[1]);
+        }
+        if (targets.size() >= 2 && span < 45D) {
+            int switches = 0;
+            long lastSwitchMs = 0L;
+            long prevTarget = -1L;
+            long maxGap = si("multitarget.switch-gap-ms", 800, 600);
+            for (Long[] h : hist) {
+                if (prevTarget != -1L && h[1] != prevTarget) {
+                    if (lastSwitchMs > 0L && h[0] - lastSwitchMs <= maxGap) {
+                        switches++;
+                    }
+                    lastSwitchMs = h[0];
+                }
+                prevTarget = h[1];
+            }
+            if (switches >= 2) {
+                if (bump(data, "multitarget", 1D, i("multitarget.vl-before-flag", 5))) {
+                    flag(data, "MultiTarget", "targets=" + targets.size() + " yawSpan=" + MathUtil.round(span, 1));
+                }
+            } else {
+                drain(data, "multitarget", 0.05D);
+            }
+        } else {
+            drain(data, "multitarget", 0.05D);
+        }
+    }
+
+    private boolean exemptReachType(String type) {
+        String raw = cfg.s("reach.exempt-entity-types",
+                "SLIME,MAGMA_CUBE,GIANT,ENDER_DRAGON,WITHER,GUARDIAN").toUpperCase();
+        for (String part : raw.split(",")) {
+            if (part.trim().equals(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void checkReach(AttackContext ctx, EntitySnapshot target) {
+        if (!isSubEnabled("reach")) {
+            return;
+        }
+        if (target.entityType != null && exemptReachType(target.entityType)) {
+            return;
+        }
+        PlayerData data = ctx.data;
+        double ageTicks = (System.currentTimeMillis() - target.createdMillis) / 50.0D;
+        if (target.uuid != null) {
+            PlayerData targetData = manager.getDataManager().get(target.uuid);
+            if (targetData != null && targetData.movement.initialized) {
+                target = new EntitySnapshot(target.id, target.uuid, target.entityType,
+                        targetData.movement.lastX, targetData.movement.lastY, targetData.movement.lastZ,
+                        target.width, target.height, System.currentTimeMillis(), 0D, 0D, 0D);
+                ageTicks = 0D;
+            }
+        }
+        double cap = i("reach.extrapolate-cap-ticks", 10);
+        if (ageTicks > cap) {
+            ageTicks = cap;
+        }
+        double tx = target.x + target.vx * ageTicks;
+        double ty = target.y + target.vy * ageTicks;
+        double tz = target.z + target.vz * ageTicks;
+        double halfW = target.width / 2D;
+        double targetCenterY = ty + target.height / 2D;
+        double rawCenterY = target.y + target.height / 2D;
+        double reached = Double.MAX_VALUE;
+        double reachedRaw = Double.MAX_VALUE;
+        for (double eye : new double[] { EYE_STANDING, EYE_SNEAKING }) {
+            reached = Math.min(reached, MathUtil.distanceToAabb(data.movement.lastX,
+                    data.movement.lastY + eye, data.movement.lastZ, tx, targetCenterY, tz,
+                    halfW, target.height / 2D));
+            reachedRaw = Math.min(reachedRaw, MathUtil.distanceToAabb(data.movement.lastX,
+                    data.movement.lastY + eye, data.movement.lastZ, target.x, rawCenterY, target.z,
+                    halfW, target.height / 2D));
+        }
+        if (reachedRaw < reached) {
+            reached = reachedRaw;
+        }
+        double ping = data.ping;
+        if (target.uuid != null) {
+            PlayerData targetData = manager.getDataManager().get(target.uuid);
+            ping += targetData.ping;
+        }
+        double allowed = sd("reach.max-distance", 3.05D, 3.0D)
+                + ping * sd("reach.ping-compensation", 0.002D, 0.001D);
+        if (reached > allowed) {
+            if (bump(data, "reach", 1D, i("reach.vl-before-flag", 5))) {
+                flag(data, "Reach", "dist=" + MathUtil.round(reached, 2) + " allow=" + MathUtil.round(allowed, 2));
+            }
+        } else {
+            drain(data, "reach", 0.1D);
+        }
+    }
+
+    public void checkPendingAngles(PlayerData data, float yaw, float pitch) {
+        if (data.pendingAngleTargets.isEmpty()) {
+            return;
+        }
+        if (!isSubEnabled("angle")) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        double exemptDeg = d("angle.turn-exempt-degrees", 25D);
+        for (Long[] entry : data.pendingAngleTargets) {
+            if (now - entry[1] > 400L) {
+                continue;
+            }
+            double yawAtAttack = entry[2] / 1000D;
+            if (Math.abs(MathUtil.normalizeYaw(yaw - yawAtAttack)) > exemptDeg) {
+                continue;
+            }
+            EntitySnapshot target = manager.getEntitySnapshots().get(entry[0].intValue());
+            if (target == null) {
+                continue;
+            }
+            if (angleHit(data, target, yaw, pitch)) {
+                drain(data, "angle", 0.05D);
+            } else if (bump(data, "angle", 1D, i("angle.vl-before-flag", 6))) {
+                flag(data, "Angle", "crosshair not on hitbox");
+            }
+        }
+        data.pendingAngleTargets.clear();
+    }
+
+    private boolean angleHit(PlayerData data, EntitySnapshot target, float yaw, float pitch) {
+        if (!data.hasRotation) {
+            return true;
+        }
+        if (target.uuid != null) {
+            PlayerData targetData = manager.getDataManager().get(target.uuid);
+            if (targetData != null && targetData.movement.initialized) {
+                target = new EntitySnapshot(target.id, target.uuid, target.entityType,
+                        targetData.movement.lastX, targetData.movement.lastY, targetData.movement.lastZ,
+                        target.width, target.height, System.currentTimeMillis(), 0D, 0D, 0D);
+            }
+        }
+        double targetCenterY = target.y + target.height / 2D;
+        double halfW = target.width / 2D;
+        double halfH = target.height / 2D;
+        double pingSum = data.ping;
+        if (target.uuid != null) {
+            PlayerData targetData = manager.getDataManager().get(target.uuid);
+            pingSum += targetData.ping;
+        }
+        double expand = sd("angle.hit-expand", 0.35D, 0.15D)
+                + pingSum * sd("angle.ping-expand", 0.002D, 0.001D);
+        for (double eye : new double[] { EYE_STANDING, EYE_SNEAKING }) {
+            if (MathUtil.rayIntersectsAabb(data.movement.lastX, data.movement.lastY + eye, data.movement.lastZ,
+                    yaw, pitch,
+                    target.x - halfW, targetCenterY - halfH, target.z - halfW,
+                    target.x + halfW, targetCenterY + halfH, target.z + halfW, expand)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void checkThroughWalls(AttackContext ctx, EntitySnapshot target) {
+        if (!isSubEnabled("throughwalls")) {
+            return;
+        }
+        PlayerData data = ctx.data;
+        if (manager.getMainHandler().getTps() < d("throughwalls.tps-exempt", 15D)) {
+            return;
+        }
+        if (System.currentTimeMillis() - target.createdMillis > 300L) {
+            return;
+        }
+        double speed = Math.sqrt(target.vx * target.vx + target.vz * target.vz);
+        if (speed > sd("throughwalls.max-target-speed", 0.6D, 0.4D)) {
+            return;
+        }
+        double ex = data.movement.lastX;
+        double ez = data.movement.lastZ;
+        double tx = target.x;
+        double ty = target.y + target.height / 2D;
+        double tz = target.z;
+        double hDist = Math.sqrt((tx - ex) * (tx - ex) + (tz - ez) * (tz - ez));
+        double minDist = sd("throughwalls.min-distance", 1.5D, 1.2D);
+        if (hDist <= minDist) {
+            return;
+        }
+        double maxLen = d("throughwalls.ray-length", 5.0D);
+        if (hDist > maxLen) {
+            return;
+        }
+        double step = d("throughwalls.sample-step", 0.35D);
+        double maxTicks = d("throughwalls.max-rays", 32D);
+        double minBlockedDistance = sd("throughwalls.min-blocked-distance", 1.0D, 0.7D);
+        org.bukkit.World world = null;
+        org.bukkit.entity.Player player = org.bukkit.Bukkit.getPlayer(data.getUuid());
+        if (player != null && player.isOnline() && player.getWorld() != null) {
+            world = player.getWorld();
+        }
+        if (world == null) {
+            return;
+        }
+        double pRx = data.movement.lastLastX;
+        double pRy = data.movement.lastLastY;
+        double pRz = data.movement.lastLastZ;
+        double tRx = tx - target.vx;
+        double tRy = ty - target.vy;
+        double tRz = tz - target.vz;
+        double blockedAt = 0D;
+        for (double[] seg : new double[][] {
+                { ex, data.movement.lastY + EYE_STANDING, ez, tx, ty, tz },
+                { ex, data.movement.lastY + EYE_SNEAKING, ez, tx, ty, tz },
+                { pRx, pRy + EYE_STANDING, pRz, tRx, tRy, tRz } }) {
+            double sx = seg[0];
+            double sy = seg[1];
+            double sz = seg[2];
+            double dx = seg[3] - sx;
+            double dy = seg[4] - sy;
+            double dz = seg[5] - sz;
+            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 1e-6) {
+                return;
+            }
+            double hits = Math.min(Math.ceil(len / step), maxTicks);
+            boolean rayBlocked = false;
+            double firstBlocked = 0D;
+            for (double k = 1D; k <= hits; k++) {
+                double t = k * step;
+                int bx = (int) Math.floor(sx + dx / len * t);
+                int by = (int) Math.floor(sy + dy / len * t);
+                int bz = (int) Math.floor(sz + dz / len * t);
+                try {
+                    boolean oc = NmsUtil.isOccluding(world, bx, by, bz);
+                    if (!oc) {
+                        oc = world.getBlockAt(bx, by, bz).getType().isSolid();
+                    }
+                    if (oc) {
+                        rayBlocked = true;
+                        firstBlocked = t;
+                        break;
+                    }
+                } catch (Exception e) {
+                    return;
+                }
+            }
+            if (!rayBlocked) {
+                return;
+            }
+            if (blockedAt == 0D || firstBlocked < blockedAt) {
+                blockedAt = firstBlocked;
+            }
+        }
+        if (blockedAt < minBlockedDistance) {
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        int window = i("throughwalls.double-trigger-ms", 12000);
+        if (nowMs - data.lastThroughWallsTime > window) {
+            data.throughWallsBurst = 0;
+        }
+        data.throughWallsBurst++;
+        data.lastThroughWallsTime = nowMs;
+        if (data.throughWallsBurst >= 2) {
+            data.throughWallsBurst = 0;
+            if (bump(data, "throughwalls", 1D, i("throughwalls.vl-before-flag", 3))) {
+                flag(data, "ThroughWalls", "hit through block at " + MathUtil.round(blockedAt, 1) + "m");
+            }
+        }
+    }
+
+    private void checkCps(AttackContext ctx) {
+        if (!isSubEnabled("cps")) {
+            return;
+        }
+        PlayerData data = ctx.data;
+        if (data.ping > i("cps.max-ping", 200)) {
+            return;
+        }
+        long window = i("cps.window-ms", 1000);
+        data.attackTimes.add(ctx.time);
+        data.attackTimes.removeIf(t -> t < ctx.time - window);
+        int cps = data.attackTimes.size();
+        int maxCps = si("cps.max-cps", 20, 14);
+        if (cps > maxCps) {
+            int need = Math.max(1, isStrict() ? 1 : i("cps.required-consecutive-windows", 2));
+            if (++data.cpsStreak >= need) {
+                data.cpsStreak = 0;
+                if (bump(data, "cps", 1D, i("cps.vl-before-flag", 6))) {
+                    flag(data, "Cps", "cps=" + cps + " max=" + maxCps);
+                }
+            } else {
+                drain(data, "cps", 0.05D);
+            }
+        } else {
+            data.cpsStreak = 0;
+            drain(data, "cps", 0.05D);
+        }
+    }
+}

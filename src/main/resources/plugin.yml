@@ -1,0 +1,36 @@
+name: YCBR
+main: com.ycbr.anticheat.YCBR
+version: 1.0.0
+author: YCBR
+description: YCBR AntiCheat for 1.8.9 Paper
+depend: [ProtocolLib]
+commands:
+  ycbr:
+    description: YCBR AntiCheat main command
+    usage: /ycbr <reload|alerts|help>
+    permission: ycbr.admin
+    aliases: [yc, ycbrac]
+  timeban:
+    description: Ban a player for 1 hour
+    usage: /timeban <player>
+    permission: ycbr.admin
+  untimeban:
+    description: Unban a player
+    usage: /untimeban <player>
+    permission: ycbr.admin
+  register:
+    description: Register a new account
+    usage: /register <password> <password>
+  login:
+    description: Login to your account
+    usage: /login <password>
+  ycbrop:
+    description: YCBR anti-cheat operator command
+    usage: /ycbrop <player|remove|list|gui>
+permissions:
+  ycbr.admin:
+    description: Access to YCBR commands
+    default: op
+  ycbr.alerts:
+    description: Receive anti-cheat alerts
+    default: op
