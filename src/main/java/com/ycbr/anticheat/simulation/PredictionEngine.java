@@ -58,13 +58,50 @@ public final class PredictionEngine {
             double motionX, double motionZ, boolean onGround, float yaw,
             double frictionFactor, boolean sprinting, boolean jumping,
             boolean sneaking, double speedLevel, double jumpLevel, double potionLevel) {
+        return predictSingle(motionX, motionZ, onGround, yaw, frictionFactor,
+                sprinting, jumping, sneaking, speedLevel, jumpLevel, potionLevel,
+                false, false, false, false);
+    }
+
+    /**
+     * Single-tick prediction with world-state modifiers.
+     *
+     * @param inLiquid     water/lava: reduced friction 0.8, gravity 0.02, vertical drag 0.8
+     * @param inWeb        cobweb: motion scaled by 0.105 after input
+     * @param onLadder     ladder/vine: can climb, motY capped at 0.15
+     * @param headBlocked  ceiling collision: jump velocity capped at 0.3
+     */
+    public static Result predictSingle(
+            double motionX, double motionZ, boolean onGround, float yaw,
+            double frictionFactor, boolean sprinting, boolean jumping,
+            boolean sneaking, double speedLevel, double jumpLevel, double potionLevel,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked) {
 
         double motX = motionX;
         double motZ = motionZ;
         double motY = 0.0;
 
-        if (jumping && onGround) {
+        double gravity = GRAVITY;
+        double vDrag = VERTICAL_DRAG;
+        double hFriction = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+
+        if (inWeb) {
+            hFriction = 0.6;
+            gravity = 0.02;
+        } else if (inLiquid) {
+            gravity = 0.02;
+            vDrag = 0.8;
+            hFriction = 0.8;
+            if (jumping) {
+                motY = 0.08;
+            }
+        }
+
+        if (jumping && onGround && !inLiquid) {
             motY = JUMP_VELOCITY + jumpLevel * 0.1;
+            if (headBlocked) {
+                motY = Math.min(motY, 0.3);
+            }
             if (sprinting) {
                 double rad = yaw * Math.PI / 180.0;
                 motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
@@ -72,7 +109,7 @@ public final class PredictionEngine {
             }
         }
 
-        double f5 = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+        double f5 = hFriction;
         double f6 = ACCEL_FACTOR / (f5 * f5 * f5);
 
         double baseSpeed = BASE_SPEED;
@@ -80,7 +117,12 @@ public final class PredictionEngine {
         double effectivePotion = Math.max(speedLevel, potionLevel);
         if (effectivePotion > 0) baseSpeed *= 1.0 + 0.2 * effectivePotion;
 
-        double inputSpeed = onGround ? baseSpeed * f6 : AIR_ACCEL;
+        double inputSpeed;
+        if (inLiquid) {
+            inputSpeed = baseSpeed * 0.4;
+        } else {
+            inputSpeed = onGround ? baseSpeed * f6 : AIR_ACCEL;
+        }
 
         double inputFactor = sneaking ? 0.3 : 1.0;
         inputSpeed *= inputFactor;
@@ -97,13 +139,24 @@ public final class PredictionEngine {
             motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
         }
 
-        if (jumping && onGround) {
+        // cobweb damps motion after input is applied
+        if (inWeb) {
+            motX *= 0.105;
+            motY *= 0.105;
+            motZ *= 0.105;
+        }
+
+        if (onLadder) {
+            // climb: climb speed 0.15 when holding W, ignore gravity
+            motY = 0.15;
+            gravity = 0.0;
+        } else if (jumping && onGround && !inLiquid) {
             // motY already set above
         } else if (onGround) {
             motY = 0.0;
         }
-        motY -= GRAVITY;
-        motY *= VERTICAL_DRAG;
+        motY -= gravity;
+        motY *= vDrag;
         motX *= f5;
         motZ *= f5;
 
@@ -117,6 +170,17 @@ public final class PredictionEngine {
     public static Candidate[] candidates(
             double motionX, double motionZ, boolean onGround, float yaw,
             double frictionFactor, boolean sprinting, double speedLevel, double jumpLevel) {
+        return candidates(motionX, motionZ, onGround, yaw, frictionFactor,
+                sprinting, speedLevel, jumpLevel, false, false, false, false);
+    }
+
+    /**
+     * Candidate generation with world-state modifiers.
+     */
+    public static Candidate[] candidates(
+            double motionX, double motionZ, boolean onGround, float yaw,
+            double frictionFactor, boolean sprinting, double speedLevel, double jumpLevel,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked) {
 
         List<Candidate> list = new ArrayList<Candidate>();
         double[] speedFactors = {1.0, SPRINT_MODIFIER, 0.3};
@@ -132,8 +196,24 @@ public final class PredictionEngine {
                 double motZ = motionZ;
                 double motY = 0.0;
 
-                if (isJump) {
+                double gravity = GRAVITY;
+                double vDrag = VERTICAL_DRAG;
+                double hFriction = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+
+                if (inWeb) {
+                    hFriction = 0.6;
+                    gravity = 0.02;
+                } else if (inLiquid) {
+                    gravity = 0.02;
+                    vDrag = 0.8;
+                    hFriction = 0.8;
+                }
+
+                if (isJump && !inLiquid) {
                     motY = JUMP_VELOCITY + jumpLevel * 0.1;
+                    if (headBlocked) {
+                        motY = Math.min(motY, 0.3);
+                    }
                     if (effectiveSprint) {
                         double rad = yaw * Math.PI / 180.0;
                         motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
@@ -141,14 +221,19 @@ public final class PredictionEngine {
                     }
                 }
 
-                double f5 = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+                double f5 = hFriction;
                 double f6 = ACCEL_FACTOR / (f5 * f5 * f5);
 
                 double baseSpeed = BASE_SPEED;
                 if (sprinting) baseSpeed *= SPRINT_MODIFIER;
                 if (speedLevel > 0) baseSpeed *= 1.0 + 0.2 * speedLevel;
 
-                double inputSpeed = onGround ? baseSpeed * f6 : AIR_ACCEL;
+                double inputSpeed;
+                if (inLiquid) {
+                    inputSpeed = baseSpeed * 0.4;
+                } else {
+                    inputSpeed = onGround ? baseSpeed * f6 : AIR_ACCEL;
+                }
                 inputSpeed *= speedFactors[s];
 
                 double fwd = 1.0;
@@ -162,13 +247,23 @@ public final class PredictionEngine {
                 motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
                 motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
 
-                if (isJump) {
+                // cobweb damps motion after input is applied
+                if (inWeb) {
+                    motX *= 0.105;
+                    motY *= 0.105;
+                    motZ *= 0.105;
+                }
+
+                if (onLadder) {
+                    motY = 0.15;
+                    gravity = 0.0;
+                } else if (isJump && !inLiquid) {
                     // motY already set above
                 } else if (onGround) {
                     motY = 0.0;
                 }
-                motY -= GRAVITY;
-                motY *= VERTICAL_DRAG;
+                motY -= gravity;
+                motY *= vDrag;
                 motX *= f5;
                 motZ *= f5;
 

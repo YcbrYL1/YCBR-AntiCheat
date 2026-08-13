@@ -129,4 +129,41 @@ class PredictionEngineTest {
             motZ = actualDZ;
         }
     }
+
+    @Test
+    void predictSingle_inLiquidSlowsDown() {
+        PredictionEngine.Result ground = PredictionEngine.predictSingle(
+            0.0, 0.0, true, 0f, 0.6, false, false, false, 0, 0, 0);
+        PredictionEngine.Result liquid = PredictionEngine.predictSingle(
+            0.0, 0.0, true, 0f, 0.6, false, false, false, 0, 0, 0, true, false, false, false);
+        double groundH = Math.hypot(ground.deltaX, ground.deltaZ);
+        double liquidH = Math.hypot(liquid.deltaX, liquid.deltaZ);
+        assertTrue(liquidH < groundH * 0.8, "liquidH=" + liquidH + " groundH=" + groundH);
+    }
+
+    @Test
+    void predictSingle_inWebHeavilySlowed() {
+        PredictionEngine.Result normal = PredictionEngine.predictSingle(
+            0.0, 0.0, true, 0f, 0.6, false, false, false, 0, 0, 0);
+        PredictionEngine.Result web = PredictionEngine.predictSingle(
+            0.0, 0.0, true, 0f, 0.6, false, false, false, 0, 0, 0, false, true, false, false);
+        double normalH = Math.hypot(normal.deltaX, normal.deltaZ);
+        double webH = Math.hypot(web.deltaX, web.deltaZ);
+        assertTrue(webH < normalH * 0.3, "webH=" + webH + " normalH=" + normalH);
+    }
+
+    @Test
+    void predictSingle_onLadderCanClimb() {
+        PredictionEngine.Result ladder = PredictionEngine.predictSingle(
+            0.0, 0.0, false, 0f, 0.6, false, false, false, 0, 0, 0, false, false, true, false);
+        // 梯子上攀爬：motY 应 > 0（向上）
+        assertTrue(ladder.motionY > 0.0, "ladder motionY=" + ladder.motionY);
+    }
+
+    @Test
+    void candidates_worldStateOverloadCompiles() {
+        PredictionEngine.Candidate[] cands = PredictionEngine.candidates(
+            0.0, 0.0, true, 0f, 0.6, false, 0, 0, false, false, false, false);
+        assertTrue(cands.length > 0);
+    }
 }
