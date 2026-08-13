@@ -1,0 +1,396 @@
+settings:
+  alerts-prefix: "&8[&cYCBR&8] &7"
+  notify-every-vl: 1
+  tick-interval: 1
+  player-snapshot-interval-ticks: 2
+  entity-snapshot-interval-ticks: 4
+  check-threads: 2
+  max-ping-for-checks: 400
+  data-sweep-minutes: 30
+  violation-decay-seconds: 60
+  vl-reset-window-ms: 60000
+  debug-velocity: false
+  auth-enabled: true
+  auth-session-hours: 24
+  auth-premium-players: []
+  strict-mode: false
+  ycbrop-players: []
+  bot-verification:
+    enabled: true
+    max-accounts-per-ip: 5
+    account-retention-days: 30
+    kick-first-join: "&c请重新进入服务器以完成验证"
+    kick-many-accounts: "&c你已经有大量账号进入服务器，请你先退出再进入"
+  ddos:
+    enabled: true
+    max-logins-per-minute: 3
+    max-hostname-length: 255
+    max-username-length: 16
+    max-encrypted-response-length: 256
+    handshake-timeout-seconds: 30
+    status-timeout-seconds: 10
+    login-timeout-seconds: 40
+    scan-interval-seconds: 5
+    kick-rate-limit: "&c登录尝试过于频繁，请等待一分钟后再试"
+    kick-invalid: "&c连接参数异常"
+  improbable:
+    enabled: true
+    window-seconds: 15
+    min-threshold: 12
+    threshold-per-player: 3
+    min-players: 3
+    fuse-seconds: 60
+  ban:
+    hours: 1
+    kick-message: "&c你已被 YCBR 反作弊封禁，剩余 %remaining%，到期时间：%time%（北京时间）"
+    login-denied-message: "&c你已被 YCBR 反作弊封禁，剩余 %remaining%，到期时间：%time%（北京时间）"
+
+checks:
+  killaura:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for KillAura"
+    reach:
+      enabled: true
+      max-distance: 3.05
+      ping-compensation: 0.002
+      extrapolate-cap-ticks: 10
+      vl-before-flag: 5
+      exempt-entity-types: "SLIME,MAGMA_CUBE,GIANT,ENDER_DRAGON,WITHER,GUARDIAN"
+    angle:
+      enabled: true
+      hit-expand: 0.35
+      ping-expand: 0.002
+      turn-exempt-degrees: 25.0
+      vl-before-flag: 6
+    selfinteract:
+      enabled: true
+      vl-before-flag: 1
+    autoblock:
+      enabled: true
+      stale-ms: 150
+      dig-exempt-ms: 200
+      vl-before-flag: 1
+    inventorycombo:
+      enabled: true
+      attack-window-ms: 100
+      vl-before-flag: 1
+    post:
+      enabled: true
+      tps-exempt: 15
+      min-gap-ms: 40
+      max-gap-ms: 100
+      max-ping: 150
+      vl-before-flag: 3
+    switch:
+      enabled: true
+      ratio-reset: 40
+      min-samples: 20
+      min-ratio: 0.85
+      window-ms: 5
+      min-yaw-rate: 15
+      vl-before-flag: 2
+    throughwalls:
+      enabled: true
+      min-distance: 1.5
+      ray-length: 5.0
+      sample-step: 0.35
+      max-rays: 32
+      min-blocked-distance: 1.5
+      max-target-speed: 0.6
+      double-trigger-ms: 12000
+      tps-exempt: 15
+      vl-before-flag: 3
+    modulo360:
+      enabled: true
+      min-streak: 2
+      max-ping: 150
+      vl-before-flag: 2
+    cps:
+      enabled: true
+      max-cps: 20
+      window-ms: 1000
+      required-consecutive-windows: 2
+      max-ping: 200
+      vl-before-flag: 6
+    aimstep:
+      enabled: true
+      max-no-delta: 0.00001
+      min-step-delta: 20.0
+      vl-before-flag: 8
+    gcd:
+      enabled: true
+      vl-before-flag: 6
+    gcdgrid:
+      enabled: false
+      vl-before-flag: 6
+    conststep:
+      enabled: true
+      vl-before-flag: 6
+    axisasym:
+      enabled: true
+      var-max: 0.05
+      var-min: 20
+      vl-before-flag: 6
+    interval:
+      enabled: true
+      max-cv: 0.1
+      vl-before-flag: 5
+    noswing:
+      enabled: true
+      window-ms: 400
+      vl-before-flag: 3
+    noswingsame:
+      enabled: true
+      vl-before-flag: 2
+    multiinteract:
+      enabled: true
+      max-gap-ms: 100
+      vl-before-flag: 2
+    multitarget:
+      enabled: false
+      switch-gap-ms: 800
+      vl-before-flag: 5
+    bigrot:
+      enabled: true
+      min-turn-degrees: 60
+      min-turns: 5
+      window-ms: 800
+      vl-before-flag: 3
+  scaffold:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for Scaffold"
+    invalid-place:
+      enabled: true
+      vl-before-flag: 2
+    fabricated:
+      enabled: true
+      vl-before-flag: 2
+    footclick:
+      enabled: false
+      vl-before-flag: 1
+    fast-place:
+      enabled: true
+      max-cps: 22
+      window-ms: 1000
+      vl-before-flag: 6
+    move-place:
+      enabled: true
+      max-speed: 0.55
+      vl-before-flag: 5
+    place-aim:
+      enabled: true
+      max-horizontal: 6.5
+      max-vertical: 4.0
+      ping-expand: 0.004
+      vl-before-flag: 4
+    rotation:
+      enabled: true
+      max-yaw-diff: 120.0
+      consecutive-away: 8
+      vl-before-flag: 6
+    cadence:
+      enabled: true
+      batch-size: 10
+      tolerance-ms: 10
+      vl-before-flag: 4
+    colinear:
+      enabled: true
+      vl-before-flag: 4
+    grid45:
+      enabled: false
+      max-pitch-std: 0.15
+      max-yaw-mod: 0.02
+      vl-before-flag: 4
+    duprot:
+      enabled: false
+      vl-before-flag: 4
+  speed:
+    enabled: true
+    kick-at-vl: 25
+    kick-message: "&cKicked for Speed"
+    extreme:
+      enabled: true
+      vl-before-flag: 2
+    min-overage: 0.02
+    min-avg-overage: 0.06
+    spike-grace: 0.25
+    spike-grace-ticks: 3
+    ground:
+      enabled: true
+      limit: 0.34
+      landing-ticks: 5
+      landing-bonus: 0.1
+      speed-potion-multiplier: 0.05
+      ice-multiplier: 1.6
+      boxed-multiplier: 1.1
+    air:
+      enabled: true
+      minimum: 0.11
+      momentum: 0.42
+      momentum-decay: 0.985
+      burst-potion-factor: 0.2
+    vl-before-flag: 8
+  velocity:
+    enabled: true
+    kick-at-vl: 15
+    kick-message: "&cKicked for Velocity"
+    horizontal:
+      enabled: true
+      expected-min: 0.3
+      ratio-air: 0.25
+      ratio-ground: 0.15
+      ratio-partial: 0.5
+      expected-min-partial: 0.6
+      partial-streak: 3
+      direction-dot: -0.25
+      reversed-streak: 3
+      ratio-precise: 0.995
+      precise-band-min: 0.97
+      precise-band-max: 1.2
+      precise-expected-min: 0.3
+      precise-pre-speed: 0.06
+      precise-streak: 2
+      vl-before-flag: 2
+    jumpreset:
+      enabled: true
+      window-ms: 40
+      streak: 3
+      vl-before-flag: 4
+    sprintreset:
+      enabled: true
+      min-lead-ms: 60
+      max-lead-ms: 150
+      streak: 3
+      vl-before-flag: 4
+    vertical:
+      enabled: true
+      minimum-percentage: 45.0
+      expected-min: 0.25
+      vl-before-flag: 4
+  simulation:
+    enabled: false
+    sim-speed:
+      enabled: false
+      horizontal-tolerance: 0.03
+      vl-before-flag: 8
+      strict:
+        horizontal-tolerance: 0.01
+    sim-fly:
+      enabled: false
+      vertical-tolerance: 0.05
+      vl-before-flag: 10
+      strict:
+        vertical-tolerance: 0.03
+  fly:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for Fly"
+    rise:
+      enabled: true
+      max-vertical: 1.25
+      jump-tolerance: 0.05
+      full-tolerance: 0.02
+      vl-before-flag: 5
+    level:
+      enabled: true
+      max-hover-ticks: 8
+      vl-before-flag: 6
+  criticals:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for Criticals"
+    air:
+      enabled: true
+      jump-tolerance: 0.05
+      vl-before-flag: 5
+  timer:
+    enabled: true
+    kick-at-vl: 30
+    kick-message: "&cKicked for Timer"
+    max-eps: 22
+    max-eps-short: 24
+    min-tps: 15
+    burst-ms: 500
+    max-burst-eps: 22
+    burst-vl-before-flag: 3
+    vl-before-flag: 5
+  nofall:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for NoFall"
+    window-ticks: 20
+    window-min-claims: 8
+    fall-damage-vl-before-flag: 3
+    vl-before-flag: 5
+  badpacket:
+    enabled: true
+    kick-at-vl: 20
+    vehicle-grace-ms: 2000
+  noslow:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for NoSlow"
+    deceleration: 1.0
+    per-tick-budget: 0.03
+    streak: 2
+    vl-before-flag: 4
+  autotool:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for AutoTool"
+    cooldown-ms: 150000
+    vl-before-flag: 3
+  fastthrow:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for FastThrow"
+    count: 3
+    cooldown-ms: 5000
+    max-ping: 300
+    vl-before-flag: 3
+  instantbow:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for InstantBow"
+    bow-force-min: 0.15
+    tolerance-ms: 130
+    cooldown-ms: 5000
+    vl-before-flag: 2
+  fastclick:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for FastClick"
+    burst-count: 6
+    burst-window-ms: 200
+    max-ping: 200
+    cooldown-ms: 5000
+    vl-before-flag: 2
+  reach:
+    enabled: true
+    kick-at-vl: 25
+    kick-message: "&cKicked for Reach"
+    max-reach: 3.1
+    leniency: 0.03
+    vl-before-flag: 2
+  wrongturn:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for WrongTurn"
+    vl-before-flag: 1
+  sprint:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for Sprint"
+    max-flip-gap-ms: 20
+    flips-to-flag: 3
+    vl-before-flag: 2
+  blink:
+    enabled: true
+    kick-at-vl: 20
+    kick-message: "&cKicked for Blink"
+    min-tps: 15
+    max-silence-ms: 3000
+    cooldown-ms: 5000
+    vl-before-flag: 2
