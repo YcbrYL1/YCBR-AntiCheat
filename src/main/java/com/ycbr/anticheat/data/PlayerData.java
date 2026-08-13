@@ -10,12 +10,14 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.pipeline.PlayerActor;
+import com.ycbr.anticheat.simulation.ShadowPlayer;
 
 public final class PlayerData {
 
     private final UUID uuid;
     public final PlayerActor actor = new PlayerActor();
     public final MovementTracker movement = new MovementTracker();
+    public final ShadowPlayer shadow = new ShadowPlayer();
     public final VelocityState velocity = new VelocityState();
     public final Queue<Long> attackTimes = new ConcurrentLinkedQueue<Long>();
     public final Queue<Long> placeTimes = new ConcurrentLinkedQueue<Long>();

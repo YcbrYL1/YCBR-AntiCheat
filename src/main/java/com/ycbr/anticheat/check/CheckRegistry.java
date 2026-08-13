@@ -15,6 +15,7 @@ import com.ycbr.anticheat.check.combat.ScaffoldCheck;
 import com.ycbr.anticheat.check.movement.FlyCheck;
 import com.ycbr.anticheat.check.movement.NoFallCheck;
 import com.ycbr.anticheat.check.movement.NoSlowCheck;
+import com.ycbr.anticheat.check.movement.SimulationCheck;
 import com.ycbr.anticheat.check.movement.SpeedCheck;
 import com.ycbr.anticheat.check.movement.VelocityCheck;
 import com.ycbr.anticheat.check.protocol.BlinkCheck;
@@ -61,6 +62,7 @@ public final class CheckRegistry {
         add(new BowCheck(manager));
         add(new FastClickCheck(manager));
         add(new ReachCheck(manager));
+        add(new SimulationCheck(manager));
         add(protocol);
         add(wrongTurn);
         add(blink);
