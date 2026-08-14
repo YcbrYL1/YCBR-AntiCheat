@@ -37,6 +37,7 @@ public final class AntiCheatManager {
     private BotManager botManager;
     private DDosGuard ddosGuard;
     private GhostManager ghostManager;
+    private DatasetManager datasetManager;
 
     public AntiCheatManager(YCBR plugin) {
         this.plugin = plugin;
@@ -70,6 +71,7 @@ public final class AntiCheatManager {
         ddosGuard.start();
 
         ghostManager = new GhostManager(this);
+        datasetManager = new DatasetManager(this);
 
         packetListener = new AsyncPacketListener(this);
         packetListener.start();
@@ -181,6 +183,10 @@ public final class AntiCheatManager {
 
     public GhostManager getGhostManager() {
         return ghostManager;
+    }
+
+    public DatasetManager getDatasetManager() {
+        return datasetManager;
     }
 
     public boolean isYcbrOp(String name) {

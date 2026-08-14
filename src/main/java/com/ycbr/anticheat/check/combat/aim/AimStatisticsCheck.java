@@ -44,6 +44,7 @@ public final class AimStatisticsCheck extends Check {
         }
         long now = System.currentTimeMillis();
         if (now - data.lastAttackTime > WINDOW_MS) {
+            flushRecording(data, now);
             return; // 攻击窗口外不采集
         }
 
@@ -86,6 +87,26 @@ public final class AimStatisticsCheck extends Check {
         // 任一统计信号命中 → 投交叉信号（带时间戳供新鲜度校验）
         addSignal(data, "aim-stat");
         data.aimStatSignalTime = now;
+    }
+
+    /** 攻击窗口结束后，把累积样本写入数据集（若该玩家正在录制）。 */
+    private void flushRecording(PlayerData data, long now) {
+        if (data.aimDeltasStat.size() < AimStatsLogic.MIN_SAMPLES) {
+            return;
+        }
+        String player = playerName(data);
+        if (player == null || !manager.getDatasetManager().isRecording(player)) {
+            return;
+        }
+        manager.getDatasetManager().recordAimWindow(player, toList(data.aimDeltasStat));
+        data.aimDeltasStat.clear();
+        data.aimPitchDeltasStat.clear();
+        data.statSampleCount = 0;
+    }
+
+    private String playerName(PlayerData data) {
+        org.bukkit.entity.Player p = org.bukkit.Bukkit.getPlayer(data.getUuid());
+        return p == null ? null : p.getName();
     }
 
     private static List<Double> toList(java.util.ArrayDeque<Double> deque) {
