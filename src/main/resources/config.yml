@@ -420,7 +420,7 @@ reach:
     enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for Sprint"
-    max-flip-gap-ms: 20
+    max-flip-gap-ms: 40
     flips-to-flag: 3
     vl-before-flag: 2
   blink:

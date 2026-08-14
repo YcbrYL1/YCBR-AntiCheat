@@ -15,6 +15,7 @@ import com.comphenix.protocol.wrappers.BlockPosition;
 import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.check.movement.VelocityCheck;
+import com.ycbr.anticheat.check.protocol.SprintLogic;
 import com.ycbr.anticheat.core.AntiCheatManager;
 import com.ycbr.anticheat.core.TransactionTracker;
 import com.ycbr.anticheat.data.PlayerData;
@@ -82,7 +83,7 @@ public final class AsyncPacketListener {
                         data.lastSwingPositionCount = data.positionCount;
                     });
                 } else if (event.getPacketType() == PacketType.Play.Client.ENTITY_ACTION) {
-                    handleEntityAction(data, packet);
+                    handleEntityAction(data, player, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.STEER_VEHICLE) {
                     handleSteerVehicle(data, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.KEEP_ALIVE) {
@@ -278,7 +279,7 @@ public final class AsyncPacketListener {
         });
     }
 
-    private void handleEntityAction(PlayerData data, PacketContainer packet) {
+    private void handleEntityAction(PlayerData data, Player player, PacketContainer packet) {
         int action;
         try {
             action = packet.getPlayerActions().read(0).ordinal();
@@ -302,6 +303,7 @@ public final class AsyncPacketListener {
             }
         }
         final int fAction = action;
+        final int fBlocked = blockedStates(player, data);
         data.actor.submit(() -> {
             long now = System.currentTimeMillis();
             if (fAction == 3) {
@@ -315,9 +317,32 @@ public final class AsyncPacketListener {
             if (fAction == 5) {
                 manager.getRegistry().onRidingJump(data, now);
             } else {
-                manager.getRegistry().onSprintAction(data, fAction);
+                manager.getRegistry().onSprintAction(data, fAction, fBlocked);
             }
         });
+    }
+
+    private static int blockedStates(Player player, PlayerData data) {
+        int s = 0;
+        if (player.getFoodLevel() <= 6) {
+            s |= SprintLogic.STATE_HUNGRY;
+        }
+        if (player.isSneaking()) {
+            s |= SprintLogic.STATE_SNEAKING;
+        }
+        if (data.usingItem || player.isBlocking()) {
+            s |= SprintLogic.STATE_USING_ITEM;
+        }
+        if (player.hasPotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS)) {
+            s |= SprintLogic.STATE_BLINDED;
+        }
+        if (data.blockBoxedIn) {
+            s |= SprintLogic.STATE_HEAD_BLOCKED;
+        }
+        if (data.blockNearLiquid) {
+            s |= SprintLogic.STATE_IN_LIQUID;
+        }
+        return s;
     }
 
     private void handleUseEntity(PlayerData data, Player player, PacketContainer packet) {
