@@ -386,7 +386,7 @@ checks:
     tolerance-ms: 130
     cooldown-ms: 5000
     vl-before-flag: 2
-fastclick:
+  fastclick:
     enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for FastClick"
@@ -396,9 +396,9 @@ fastclick:
     cooldown-ms: 5000
     vl-before-flag: 2
     mechanical:
-        kurtosis-max: -1.0
-        vl-before-flag: 3
-reach:
+      kurtosis-max: -1.0
+      vl-before-flag: 3
+  reach:
     enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for Reach"
@@ -406,11 +406,9 @@ reach:
     leniency: 0.03
     cancel-impossible: true
     multi-frame:
-        enabled: true
-        window-ticks: 2
-        expand: 0.05
-    max-reach: 3.1
-    leniency: 0.03
+      enabled: true
+      window-ticks: 2
+      expand: 0.05
     vl-before-flag: 2
   wrongturn:
     enabled: true
