@@ -93,3 +93,60 @@ checks:
 ```
 
 注意：样本量 < 200 时 ML 收益有限；先以统计信号为主，ML 作为锦上添花。
+
+## 误判样本回灌工作流（Phase 4 配套）
+
+> 依据：《YCBR-AC_vs_Grim_误判程度对比.md》持续项建议
+
+### 1. 什么是误判样本
+
+真人玩家被 `aimstat` 统计信号（或与 KillAura 交叉）flag 的**攻击窗口**视角增量数据。
+这类窗口本应属于 `legit` 类，却被启发式判成作弊信号——把它们回灌进训练集，
+让 MLP 学会"这类窗口其实合法"，可逐步压低 `aim-stat` / KillAura 的误报。
+
+### 2. 采集
+
+- `/ycbr record <玩家> [legit|cheat]` 开始采集，label 省略时默认 `legit`
+  （仅合法在线玩家可录；label 只能是 `legit` 或 `cheat`）。
+- `/ycbr stoprecord <玩家>` 停止采集。
+- 录制期间每结束一个攻击窗口（3500ms），`AimStatisticsCheck` 调用
+  `DatasetManager.recordAimWindow` 写一行特征到
+  `plugins/YCBR/dataset/<label>_<玩家>.csv`（即插件数据目录下的 `dataset/`，
+  玩家名与 label 均已消毒 `[A-Za-z0-9_]`，防路径穿越）。
+- 采集只对正在 `record` 的玩家生效，与 `settings.dataset.enabled` 无关
+  （该配置项代码中未引用）。
+
+### 3. 筛选
+
+- 误判样本必须**人工确认为误判**后才入训练集：核对报警记录/回放，
+  确认窗口内是正常操作（如被攻击拖动视角、正常转身等）。
+- 同一玩家同一攻击窗口只保留 1 条（每个窗口本就只落 1 行，若重复采集需去重），
+  避免个别玩家的重复样本主导训练分布、引入样本偏置。
+
+### 4. 回灌
+
+1. 把筛选好的误判样本 CSV（`legit_<玩家>.csv`）复制进 `plugins/YCBR/dataset/`。
+2. 按上文[第 2 节](#2-训练python-无第三方库依赖)训练脚本合并全部 CSV 重训
+   （`data = load("plugins/YCBR/dataset/*.csv")` 会自动纳入新增文件）。
+3. 新权重按[第 3 节](#3-导出权重到-pluginsycbermlweightstxt)导出，
+   覆盖写入 `plugins/YCBR/ml/weights.txt`（`SimpleMLP.loadFromFile` 的加载路径）。
+4. **生效方式**：MLP 权重在进程内只加载一次（`AimStatisticsCheck` 静态惰性加载），
+   `/ycbr reload` 只重载配置文件、**不重载权重** → 需**重启服务器**才能加载新权重。
+
+### 5. 数据卫生
+
+- 9 特征列顺序必须与训练脚本一致（`DatasetManager` 落盘表头）：
+  `entropy,iqr,ks,jiff,zscore_count,kurtosis,samples,mean,std`。
+- label 语义：文件名以 `cheat` 开头 → 1（作弊），否则 → 0（合法）
+  （训练脚本按文件名前缀判定；误判样本一律存为 `legit_*`）。
+- **已知注意**：`AimStatisticsCheck.features()` 推理时的特征顺序与 CSV 列顺序不一致
+  （且末位用 sensitivity 而非 samples），Phase 4 对齐前 ML 输出仅作参考，
+  不要依赖其绝对精度。
+
+### 6. 预期效果与限制
+
+- 误判样本越多，MLP 越能区分"合法高仿"窗口，`aim-ml` 交叉信号的置信度判定越稳；
+  ML 仅在统计信号命中后才追加 `aim-ml` 信号，不会独立误判。
+- `checks.aimstat.ml-enabled` 默认 `false`（且 `aimstat` 检查本身默认关闭），
+  需手动开启；建议等 `simulation` 检查稳定后，再用留出集交叉验证
+  ML 对合法样本的误报率达标，再正式开启（交叉验证门控）。
