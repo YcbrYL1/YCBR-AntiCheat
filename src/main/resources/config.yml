@@ -301,6 +301,8 @@ checks:
     kurtosis-max: -0.5
     signal-fresh-ms: 10000
     vl-before-flag: 6
+    ml-enabled: false
+    ml-threshold: 0.9
     strict:
       entropy-max: 1.0
       iqr-min: 0.001

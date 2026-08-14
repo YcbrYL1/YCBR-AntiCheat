@@ -87,6 +87,62 @@ public final class AimStatisticsCheck extends Check {
         // 任一统计信号命中 → 投交叉信号（带时间戳供新鲜度校验）
         addSignal(data, "aim-stat");
         data.aimStatSignalTime = now;
+        // 可选 MLP 增强：输出 > 阈值且统计信号已命中 → 追加 aim-ml 信号
+        if (cfg.b("checks.aimstat.ml-enabled", false) && mlpLoaded()) {
+            double[] features = features(toList(data.aimDeltasStat));
+            double prob = mlp.forward(features);
+            if (prob > cfg.d("checks.aimstat.ml-threshold", 0.9D)) {
+                addSignal(data, "aim-ml");
+                data.aimStatSignalTime = now;
+            }
+        }
+    }
+
+    private static final com.ycbr.anticheat.ml.SimpleMLP mlp =
+            new com.ycbr.anticheat.ml.SimpleMLP(9, 8);
+    private static volatile boolean mlpTried;
+    private static volatile boolean mlpOk;
+
+    private boolean mlpLoaded() {
+        if (!mlpTried) {
+            mlpTried = true;
+            java.io.File f = new java.io.File(
+                    manager.getPlugin().getDataFolder(), "ml/weights.txt");
+            mlpOk = mlp.loadFromFile(f);
+        }
+        return mlpOk;
+    }
+
+    /** 特征向量（与 DatasetManager 落盘维度对齐，含灵敏度）。 */
+    private static double[] features(List<Double> deltas) {
+        double[] f = new double[9];
+        f[0] = com.ycbr.anticheat.util.Statistics.shannonEntropy(deltas);
+        f[1] = com.ycbr.anticheat.util.Statistics.kurtosis(deltas);
+        f[2] = com.ycbr.anticheat.util.Statistics.iqr(deltas);
+        f[3] = com.ycbr.anticheat.util.Statistics.kolmogorovSmirnov(deltas,
+                uniformSample(deltas));
+        f[4] = com.ycbr.anticheat.util.Statistics.jiffDelta(deltas, 3);
+        f[5] = com.ycbr.anticheat.util.Statistics.average(deltas);
+        f[6] = com.ycbr.anticheat.util.Statistics.standardDeviation(deltas);
+        f[7] = com.ycbr.anticheat.util.Statistics.zScoreOutliers(deltas, 4.0D).size();
+        f[8] = new SensitivityProcessor().calculateSensitivity(deltas);
+        return f;
+    }
+
+    private static List<Double> uniformSample(List<Double> deltas) {
+        List<Double> sorted = new ArrayList<Double>(deltas);
+        java.util.Collections.sort(sorted);
+        double min = sorted.get(0);
+        double max = sorted.get(sorted.size() - 1);
+        double span = max - min;
+        if (span < 1e-9) {
+            span = 1e-9;
+        }
+        List<Double> uniform = new ArrayList<Double>(deltas.size());
+        for (int i = 0; i < deltas.size(); i++) {
+            uniform.add(min + span * (i + 0.5D) / deltas.size());
+        }
+        return uniform;
     }
 
     /** 攻击窗口结束后，把累积样本写入数据集（若该玩家正在录制）。 */
