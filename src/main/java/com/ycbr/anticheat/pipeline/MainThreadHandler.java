@@ -128,6 +128,7 @@ public final class MainThreadHandler implements Runnable {
 
         for (PlayerData data : manager.getDataManager().all()) {
             manager.getRegistry().onMainTick(data, now);
+            checkImprobable(data);
         }
 
         if (tickCounter % cfg.playerSnapshotInterval() == 0) {
@@ -198,6 +199,33 @@ public final class MainThreadHandler implements Runnable {
                 }
             }
             data.buffers.clear();
+        }
+    }
+
+    /**
+     * ImproBable 融合判定（Phase 10，P2-9，默认关）：每玩家类别桶短窗+长窗
+     * 同时超阈且覆盖 min-categories 个类别 → 升 VL，达 vl-before-flag 才
+     * 产生 Verdict（走正常惩罚链，也被全局 fuse 统计）。
+     */
+    private void checkImprobable(PlayerData data) {
+        if (!cfg.raw().getBoolean("checks.improbable.enabled", false)) {
+            return;
+        }
+        int shortTicks = cfg.i("checks.improbable.short-ticks", 20);
+        int shortThreshold = cfg.i("checks.improbable.short-threshold", 6);
+        int longTicks = cfg.i("checks.improbable.long-ticks", 200);
+        int longThreshold = cfg.i("checks.improbable.long-threshold", 30);
+        int minCategories = cfg.i("checks.improbable.min-categories", 2);
+        if (!data.improbable.hotAndReset(tickCounter, shortTicks, shortThreshold,
+                longTicks, longThreshold, minCategories)) {
+            return;
+        }
+        long vl = data.getViolations(CheckType.IMPROBABLE) + 1L;
+        data.setViolations(CheckType.IMPROBABLE, vl);
+        if (vl >= cfg.i("checks.improbable.vl-before-flag", 3)) {
+            manager.queueVerdict(new Verdict(data.getUuid(), CheckType.IMPROBABLE,
+                    "improbable", "multi-category fused anomalies short=" + shortThreshold
+                    + " long=" + longThreshold));
         }
     }
 
@@ -373,6 +401,11 @@ public final class MainThreadHandler implements Runnable {
         List<String> copy = new ArrayList<String>(violationLog);
         java.util.Collections.reverse(copy);
         return copy;
+    }
+
+    /** 清空违规日志（GUI 日志页按钮）。主线程调用。 */
+    public void clearViolationLog() {
+        violationLog.clear();
     }
 
     private void sweep() {

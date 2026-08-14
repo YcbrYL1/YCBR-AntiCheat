@@ -25,6 +25,9 @@ public final class PlayerData {
     /** 击退速度账本（P2-8，学 NCP）：识别"发出但从未消费"的击退（默认关子检测）。 */
     public final com.ycbr.anticheat.simulation.VelocityLedger velocityLedger
             = new com.ycbr.anticheat.simulation.VelocityLedger();
+
+    /** ImproBable 跨检测融合桶（Phase 10，P2-9）：亚阈值小违规按类别喂票。 */
+    public final ImprobableTracker improbable = new ImprobableTracker();
     public final Queue<Long> attackTimes = new ConcurrentLinkedQueue<Long>();
     public final Queue<Long> placeTimes = new ConcurrentLinkedQueue<Long>();
     public final PlacePoints placePoints = new PlacePoints();
