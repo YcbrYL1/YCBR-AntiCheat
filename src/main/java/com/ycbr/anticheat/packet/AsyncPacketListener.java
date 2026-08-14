@@ -22,6 +22,7 @@ import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.AttackContext;
 import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.data.context.PlaceContext;
+import com.ycbr.anticheat.util.ItemUseLogic;
 import com.ycbr.anticheat.util.MathUtil;
 
 public final class AsyncPacketListener {
@@ -427,8 +428,6 @@ public final class AsyncPacketListener {
         final double fCursorY = cursorY;
         final double fCursorZ = cursorZ;
         data.actor.submit(() -> {
-            data.usingItem = true;
-            data.lastItemUseTime = System.currentTimeMillis();
             Material held = null;
             try {
                 Player p = Bukkit.getPlayer(data.getUuid());
@@ -441,6 +440,13 @@ public final class AsyncPacketListener {
             data.blockingSword = held == Material.WOOD_SWORD || held == Material.STONE_SWORD
                     || held == Material.IRON_SWORD || held == Material.GOLD_SWORD
                     || held == Material.DIAMOND_SWORD;
+            // 只有真正"使用物品"（吃/喝/拉弓/牛奶/钓鱼）才进入减速状态。
+            // 放置方块（BLOCK_PLACE face 0-5）不会减速、也不会发 dig status 5 复位，
+            // 若误置 usingItem 会卡死并导致 NoSlow 误判。
+            if (ItemUseLogic.isUseItem(held)) {
+                data.usingItem = true;
+                data.lastItemUseTime = System.currentTimeMillis();
+            }
             manager.getRegistry().onPlace(new PlaceContext(data, pos[0], pos[1], pos[2],
                     fDirection, System.currentTimeMillis(), fHasCursor, fCursorX, fCursorY, fCursorZ));
         });
