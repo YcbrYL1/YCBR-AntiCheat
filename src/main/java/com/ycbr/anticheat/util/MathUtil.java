@@ -90,10 +90,23 @@ public final class MathUtil {
                 maxX + expand, maxY + expand, maxZ + expand);
     }
 
+    /** 射线与 AABB 求交，但仅限射线前方 maxDistance 距离内命中。 */
+    public static boolean rayIntersectsAabb(double ox, double oy, double oz, float yaw, float pitch,
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double expand, double maxDistance) {
+        double yawR = Math.toRadians(yaw);
+        double pitchR = Math.toRadians(pitch);
+        double dx = -Math.sin(yawR) * Math.cos(pitchR);
+        double dy = -Math.sin(pitchR);
+        double dz = Math.cos(yawR) * Math.cos(pitchR);
+        return rayIntersectsAabb(ox, oy, oz, dx, dy, dz, minX - expand, minY - expand, minZ - expand,
+                maxX + expand, maxY + expand, maxZ + expand, maxDistance);
+    }
+
     private static boolean rayIntersectsAabb(double ox, double oy, double oz, double dx, double dy, double dz,
-            double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ, double maxDistance) {
         double tmin = 0D;
-        double tmax = Double.MAX_VALUE;
+        double tmax = maxDistance;
         if (Math.abs(dx) < 1E-9) {
             if (ox < minX || ox > maxX) {
                 return false;
@@ -140,6 +153,12 @@ public final class MathUtil {
             tmax = Math.min(tmax, t2);
         }
         return tmax >= tmin;
+    }
+
+    private static boolean rayIntersectsAabb(double ox, double oy, double oz, double dx, double dy, double dz,
+            double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+        return rayIntersectsAabb(ox, oy, oz, dx, dy, dz, minX, minY, minZ, maxX, maxY, maxZ,
+                Double.MAX_VALUE);
     }
 
     public static double normalizeYaw(double yaw) {

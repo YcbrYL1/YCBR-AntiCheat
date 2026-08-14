@@ -30,6 +30,7 @@ import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.AttackContext;
 import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.data.context.PlaceContext;
+import com.ycbr.anticheat.pipeline.MainThreadHandler;
 
 public final class CheckRegistry {
 
@@ -42,8 +43,10 @@ public final class CheckRegistry {
     private final ProtocolCheck protocol;
     private final AutoToolCheck autoTool;
     private final AimStatisticsCheck aimStat;
+    private final AntiCheatManager manager;
 
     public CheckRegistry(AntiCheatManager manager) {
+        this.manager = manager;
         wrongTurn = new WrongTurnCheck(manager);
         sprint = new SprintCheck(manager);
         blink = new BlinkCheck(manager);
@@ -130,6 +133,7 @@ public final class CheckRegistry {
         if (data.op) {
             return;
         }
+        data.pushRotation(yaw, pitch, manager.getMainHandler().currentServerTick());
         wrongTurn.checkRotation(data, yaw, pitch);
         killAura.checkPendingAngles(data, yaw, pitch);
         aimStat.onRotation(data, yaw, pitch);
