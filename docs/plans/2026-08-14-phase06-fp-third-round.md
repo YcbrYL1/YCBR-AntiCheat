@@ -223,13 +223,19 @@ git commit -m "docs: FP round-3 plan + Grim comparison baselines"
 - config.yml 新增 `settings.using-item-timeout-ms: 1500`。
 - 全量 **103/103** 通过，提交 `2160a00 fix(sprint): timeout-reset usingItem to kill stuck-state FP`。
 
-### 任务 2：SimulationCheck 实机开启 ⬜（待部署）
+### 任务 2：SimulationCheck 实机开启 🟡（已部署，观察期进行中）
 
-观察期未开始，等待服务器部署时机（低负载时段）。验收标准与调参步骤见任务 2 原文。
+- **2026-08-14 已部署**（jar 260436 字节，含 Phase 7/8 全部改动）：
+  - `Copy-Item target/YCBR.jar` → 服务器 plugins；`config.yml` 删除重建（模板副本，避免旧配置残留）。
+  - 开启值：`simulation.enabled: true`；`sim-speed.enabled: true`、`horizontal-tolerance: 0.02`（**第一周从宽起步**，SOP 要求显式 0.02，默认 0.01 跳档易误判）；`sim-fly.enabled: true`、`vertical-tolerance: 0.02`；`liquid-tolerance-multiplier: 2.0` 不变；`direction-match` 保持关；`settings.debug-packets: true`（观察期调试日志，调参完成关回）。
+- **观察计划**：第 1 周 0.02 无误判 → 第 2 周收紧 sim-speed 至 0.01 → 验收零误判后收紧至 0.005/0.01（对齐 Grim）。单日误判 > 5 次即回退上一档；最宽档仍误判则关闭并记录场景（按 SOP）。
+- 观察记录回填此节（日期/档位/误判样本数/豁免修正）。
 
-### 任务 3：Scaffold 行为层灰度 ⬜（待部署）
+### 任务 3：Scaffold 行为层灰度 🟡（已部署，观察期进行中）
 
-等待测试服部署（`cadence`/`grid45` 开启参数见任务 3 原文，`colinear`/`duprot` 保持关）。
+- **2026-08-14 已部署**（同任务 2 配置）：`scaffold.cadence.enabled: true`（batch-size 10 / tolerance-ms 10 / vl-before-flag 4）、`scaffold.grid45.enabled: true`（max-pitch-std 0.15 / max-yaw-mod 0.02 / vl-before-flag 4）。
+- `colinear`/`duprot` 保持 `enabled: false`（Phase 4 决策不变）。
+- 观察目标：熟练搭路玩家一周无误杀 → 生产保持；有误杀 → 上调 `vl-before-flag` 或关回并记录。
 
 ### 任务 4：基线文档入库 ✅（本次提交）
 
