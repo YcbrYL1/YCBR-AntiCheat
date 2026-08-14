@@ -125,3 +125,48 @@ applyCollision(deltaX, deltaZ, yaw, wallFwd, wallLeft, wallRight)
 - `applyCollision` 无墙输入返回原值（零行为变化验证）。
 - 活塞探测仅认 PISTON_MOVING_PIECE，不干扰现有 surface 判定。
 - 提交 2 个代码提交 + 1 个文档提交。
+
+---
+
+## 6. 实施结果（2026-08-14）
+
+### 任务 1：活塞推动豁免 ✅（`08e798d`）
+
+- `PlayerData.blockOnPiston` + `MainThreadHandler.snapshotBlockContext` 探测
+  （feet/below == PISTON_MOVING_PIECE）。
+- `WorldProbe.ProbeResult.onPiston` + `fromPlayerData` 回填。
+- `SimulationCheck`：`sim-speed.piston-tolerance-multiplier`（默认 3.0）容差放大，
+  sim-fly 不受影响。
+- 测试：`WorldProbeStepTest` +2（`pistonMovingPiece_below_isExempted`、
+  `normalSurface_notExempted`）。全量 105/105。
+
+### 任务 2：水平墙碰撞截断 + 滑墙 ✅（`e5ca5b9`）
+
+- `PredictionEngine.applyCollision(dx, dz, yaw, wallFwd, wallLeft, wallRight)`：
+  2D 逐轴截断（1.8 Entity.move 逐轴碰撞语义近似），墙距 ≥ `WALL_TRUNCATION_LIMIT`
+  (0.65) 视为无墙（吸收主线程探测 1 tick 滞后）。
+- `candidates`/`candidatesMultiTick` 新增带墙距重载（旧签名内部传 INFINITY，
+  零行为变化）；每候选位移套碰撞截断。
+- `PlayerData.wallFwdDist/wallLeftDist/wallRightDist` +
+  `MainThreadHandler.wallDistance()`（脚部位置步长 0.05 采样，上限 0.65，
+  方向约定与引擎一致 yaw=0→+X）+ `WorldProbe` 墙距字段回填（0=未探测→无墙）。
+- `SimulationCheck` 两处候选生成接入墙距。
+- 测试：新 `CollisionLogicTest` 8 用例（无墙原样/前墙/右墙/左墙/斜撞墙角双轴/
+  后退不受前墙/上限忽略/旋转 yaw）。全量 113/113。
+- **偏离记录**：计划原写"0.65 上限 + 0.05 下限"生效条件；实现中负墙距（身后墙
+  探测异常）额外加 `>= 0` 守卫，防止误截断。
+
+### 任务 3：收尾 ✅
+
+- 蓝图收敛记录：8AC P1.1 剩余项 → 活塞推动 ✅、墙碰撞 ✅；
+  0.03 跳过 tick 仍余（低频，容差兜底，与末影珍珠/载具同为暂缓项）。
+- `mvn test` 113/113 → `mvn -DskipTests package` 打包。
+
+### 验收核对
+
+| 标准 | 结果 |
+|------|------|
+| 全部新测试通过 | ✅ CollisionLogicTest 8 + WorldProbeStepTest 2 |
+| 无墙零行为变化 | ✅ applyCollision INFINITY 原样返回（noWalls_unchanged） |
+| 活塞探测不干扰 surface | ✅ 独立字段，Surface 判定未动 |
+| 提交节奏 | ✅ cdd7991（计划）+ 08e798d（t1）+ e5ca5b9（t2）+ 待定（回填） |
