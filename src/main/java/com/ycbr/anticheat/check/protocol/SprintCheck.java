@@ -14,7 +14,7 @@ public final class SprintCheck extends Check {
         super(CheckType.SPRINT, manager);
     }
 
-    public void checkAction(PlayerData data, int action) {
+    public void checkAction(PlayerData data, int action, int blockedStates) {
         if (!isEnabled()) {
             return;
         }
@@ -25,8 +25,14 @@ public final class SprintCheck extends Check {
             return;
         }
         long now = System.currentTimeMillis();
+        if (action == ACTION_START_SPRINT && SprintLogic.isIllegalFlip(blockedStates)) {
+            if (bump(data, "sprint", 1D, i("vl-before-flag", 2))) {
+                flag(data, "Sprint", "sprint in blocked state");
+            }
+        }
         if (data.lastSprintAction != 0 && data.lastSprintAction != action
-                && now - data.lastSprintActionTime < si("max-flip-gap-ms", 20, 30)) {
+                && now - data.lastSprintActionTime < si("max-flip-gap-ms", 40, 30)
+                && SprintLogic.isIllegalFlip(blockedStates)) {
             if (++data.sprintFlipCount >= si("flips-to-flag", 3, 2)) {
                 data.sprintFlipCount = 0;
                 if (bump(data, "sprint", 1D, i("vl-before-flag", 2))) {

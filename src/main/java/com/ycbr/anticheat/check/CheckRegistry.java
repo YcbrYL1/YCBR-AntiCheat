@@ -219,11 +219,11 @@ public final class CheckRegistry {
                 Double.toString(x), Double.toString(y), Double.toString(z));
     }
 
-    public void onSprintAction(PlayerData data, int action) {
+    public void onSprintAction(PlayerData data, int action, int blockedStates) {
         if (data.op) {
             return;
         }
-        sprint.checkAction(data, action);
+        sprint.checkAction(data, action, blockedStates);
     }
 
     public void onMainTick(PlayerData data, long now) {
