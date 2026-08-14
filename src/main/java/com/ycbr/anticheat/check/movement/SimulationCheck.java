@@ -93,6 +93,25 @@ public final class SimulationCheck extends Check {
         }
         boolean hMatch = actualH <= maxH + hTol;
         if (hMatch) {
+            // 方向联合匹配（8AC P2.1，默认关）：模长命中后校验位移方向与
+            // 某个候选一致。对高 ping 方向漂移敏感，ticks>=3 放宽角度。
+            if (isSubEnabled("direction-match") && actualH > 1e-4) {
+                double maxAngleDeg = ticks >= 3 ? 45.0 : d("direction-match.max-angle-deg", 30.0);
+                hMatch = false;
+                for (PredictionEngine.Candidate c : cands) {
+                    double ch = Math.hypot(c.deltaX, c.deltaZ);
+                    if (ch <= 1e-4) {
+                        continue;
+                    }
+                    double dot = actualDX * c.deltaX + actualDZ * c.deltaZ;
+                    double cosA = dot / (actualH * ch);
+                    double angle = Math.toDegrees(Math.acos(Math.max(-1.0, Math.min(1.0, cosA))));
+                    if (angle <= maxAngleDeg) {
+                        hMatch = true;
+                        break;
+                    }
+                }
+            }
             drain(data, "sim-speed", 0.05D);
         } else {
             double over = actualH - maxH - hTol;

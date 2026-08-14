@@ -257,6 +257,7 @@ public final class PredictionEngine {
         double[] speedFactors = {0.0, 1.0, SPRINT_MODIFIER, SNEAK_FACTOR};
         String[] speedLabels = {"idle", "walk", "sprint", "sneak"};
         boolean[] jumpFlags = {false, true};
+        double[] strafes = {0.0, -1.0, 1.0};
 
         for (int s = 0; s < speedFactors.length; s++) {
             for (int j = 0; j < jumpFlags.length; j++) {
@@ -272,19 +273,19 @@ public final class PredictionEngine {
                 if (inLiquid) {
                     hFriction = LIQUID_DRAG;
                 }
-                double motX = motionX * hFriction;
-                double motZ = motionZ * hFriction;
-                double motY = motionY;
+                double baseMotX = motionX * hFriction;
+                double baseMotZ = motionZ * hFriction;
+                double baseMotY = motionY;
 
                 if (jump && !inLiquid && !onLadder && !inWeb) {
-                    motY = JUMP_VELOCITY + jumpLevel * 0.1;
+                    baseMotY = JUMP_VELOCITY + jumpLevel * 0.1;
                     if (headBlocked) {
-                        motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
+                        baseMotY = Math.min(baseMotY, HEAD_BLOCKED_JUMP_CAP);
                     }
                     if (sprintRow) {
                         double rad = yaw * Math.PI / 180.0;
-                        motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
-                        motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
+                        baseMotX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
+                        baseMotZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
                     }
                 }
 
@@ -304,39 +305,44 @@ public final class PredictionEngine {
                     inputSpeed *= USING_ITEM_FACTOR;
                 }
 
-                double fwd = 1.0;
-                double strafe = 0.0;
-                double f3 = Math.sqrt(fwd * fwd + strafe * strafe);
-                if (f3 < 1e-4) {
-                    continue;
-                }
-                if (f3 < 1.0) {
-                    f3 = 1.0;
-                }
-                f3 = inputSpeed / f3;
-                double sinYaw = Math.sin(yaw * Math.PI / 180.0);
-                double cosYaw = Math.cos(yaw * Math.PI / 180.0);
-                motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
-                motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
-
-                if (inWeb) {
-                    motX *= WEB_DAMP;
-                    motY *= WEB_DAMP;
-                    motZ *= WEB_DAMP;
-                }
-
-                if (onLadder) {
-                    motY = LADDER_CLIMB;
-                } else if (!jump) {
-                    if (onGround) {
-                        motY = 0.0;
-                    } else if (inLiquid && jumpFlags[j]) {
-                        motY += LIQUID_SWIM_UP;
+                for (int st = 0; st < strafes.length; st++) {
+                    double motX = baseMotX;
+                    double motZ = baseMotZ;
+                    double motY = baseMotY;
+                    double fwd = 1.0;
+                    double strafe = strafes[st];
+                    double f3 = Math.sqrt(fwd * fwd + strafe * strafe);
+                    if (f3 < 1e-4) {
+                        continue;
                     }
-                }
+                    if (f3 < 1.0) {
+                        f3 = 1.0;
+                    }
+                    f3 = inputSpeed / f3;
+                    double sinYaw = Math.sin(yaw * Math.PI / 180.0);
+                    double cosYaw = Math.cos(yaw * Math.PI / 180.0);
+                    motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
+                    motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
 
-                list.add(new Candidate(motX, motZ, motY,
-                        speedLabels[s] + (jump ? "+jump" : "")));
+                    if (inWeb) {
+                        motX *= WEB_DAMP;
+                        motY *= WEB_DAMP;
+                        motZ *= WEB_DAMP;
+                    }
+
+                    if (onLadder) {
+                        motY = LADDER_CLIMB;
+                    } else if (!jump) {
+                        if (onGround) {
+                            motY = 0.0;
+                        } else if (inLiquid && jumpFlags[j]) {
+                            motY += LIQUID_SWIM_UP;
+                        }
+                    }
+
+                    list.add(new Candidate(motX, motZ, motY,
+                            speedLabels[s] + (jump ? "+jump" : "") + "+strafe=" + (int) strafes[st]));
+                }
             }
         }
         return list.toArray(new Candidate[0]);
@@ -385,6 +391,7 @@ public final class PredictionEngine {
         List<Candidate> list = new ArrayList<Candidate>();
         double[] speedFactors = {0.0, 1.0, SPRINT_MODIFIER, SNEAK_FACTOR};
         String[] speedLabels = {"idle", "walk", "sprint", "sneak"};
+        double[] strafes = {0.0, -1.0, 1.0};
 
         for (int s = 0; s < speedFactors.length; s++) {
             for (int jumpAttempt = 0; jumpAttempt <= 1; jumpAttempt++) {
@@ -401,80 +408,92 @@ public final class PredictionEngine {
                 double totalDY = 0.0;
                 boolean ground = onGround;
 
-                for (int t = 0; t < ticks; t++) {
-                    double hFriction = ground ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
-                    if (inLiquid) {
-                        hFriction = LIQUID_DRAG;
-                    }
-                    motX *= hFriction;
-                    motZ *= hFriction;
-
-                    boolean jumpedTick = (t == 0 && jumpOnTick0 && !inLiquid && !onLadder && !inWeb);
-                    if (jumpedTick) {
-                        motY = JUMP_VELOCITY + jumpLevel * 0.1;
-                        if (headBlocked) {
-                            motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
+                for (int st = 0; st < strafes.length; st++) {
+                    for (int t = 0; t < ticks; t++) {
+                        double hFriction = ground ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+                        if (inLiquid) {
+                            hFriction = LIQUID_DRAG;
                         }
-                        double rad = yaw * Math.PI / 180.0;
-                        motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
-                        motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
+                        motX *= hFriction;
+                        motZ *= hFriction;
+
+                        boolean jumpedTick = (t == 0 && jumpOnTick0 && !inLiquid && !onLadder && !inWeb);
+                        if (jumpedTick) {
+                            motY = JUMP_VELOCITY + jumpLevel * 0.1;
+                            if (headBlocked) {
+                                motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
+                            }
+                            double rad = yaw * Math.PI / 180.0;
+                            motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
+                            motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
+                            ground = false;
+                        }
+
+                        double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
+                        double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
+                                * (sprintRow ? SPRINT_MODIFIER : 1.0);
+                        double inputSpeed;
+                        if (inLiquid) {
+                            inputSpeed = baseSpeed * ((ground && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
+                        } else if (ground) {
+                            inputSpeed = baseSpeed * f6;
+                        } else {
+                            inputSpeed = AIR_ACCEL;
+                        }
+                        inputSpeed *= factor;
+                        if (usingItem) {
+                            inputSpeed *= USING_ITEM_FACTOR;
+                        }
+
+                        double fwd = 1.0;
+                        double strafe = strafes[st];
+                        double f3 = Math.max(1.0, Math.sqrt(fwd * fwd + strafe * strafe));
+                        f3 = inputSpeed / f3;
+                        double sinYaw = Math.sin(yaw * Math.PI / 180.0);
+                        double cosYaw = Math.cos(yaw * Math.PI / 180.0);
+                        motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
+                        motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
+
+                        if (inWeb) {
+                            motX *= WEB_DAMP;
+                            motY *= WEB_DAMP;
+                            motZ *= WEB_DAMP;
+                        }
+
+                        // 该 tick 的位置增量
+                        totalDX += motX;
+                        totalDZ += motZ;
+                        totalDY += motY;
+
+                        // 状态推进（下一 tick 的携带值）
+                        if (onLadder) {
+                            motY = LADDER_CLIMB;
+                        } else if (jumpedTick) {
+                            motY = (motY - GRAVITY) * VERTICAL_DRAG;
+                        } else if (ground) {
+                            motY = 0.0;
+                        } else if (inWeb) {
+                            motY = (motY - GRAVITY) * VERTICAL_DRAG;
+                        } else if (inLiquid) {
+                            motY = motY * LIQUID_DRAG - LIQUID_GRAVITY;
+                        } else {
+                            motY = (motY - GRAVITY) * VERTICAL_DRAG;
+                        }
                         ground = false;
                     }
 
-                    double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
-                    double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
-                            * (sprintRow ? SPRINT_MODIFIER : 1.0);
-                    double inputSpeed;
-                    if (inLiquid) {
-                        inputSpeed = baseSpeed * ((ground && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
-                    } else if (ground) {
-                        inputSpeed = baseSpeed * f6;
-                    } else {
-                        inputSpeed = AIR_ACCEL;
-                    }
-                    inputSpeed *= factor;
-                    if (usingItem) {
-                        inputSpeed *= USING_ITEM_FACTOR;
-                    }
-
-                    double fwd = 1.0;
-                    double f3 = Math.max(1.0, Math.sqrt(fwd * fwd));
-                    f3 = inputSpeed / f3;
-                    double sinYaw = Math.sin(yaw * Math.PI / 180.0);
-                    double cosYaw = Math.cos(yaw * Math.PI / 180.0);
-                    motX += fwd * f3 * cosYaw;
-                    motZ += fwd * f3 * sinYaw;
-
-                    if (inWeb) {
-                        motX *= WEB_DAMP;
-                        motY *= WEB_DAMP;
-                        motZ *= WEB_DAMP;
-                    }
-
-                    // 该 tick 的位置增量
-                    totalDX += motX;
-                    totalDZ += motZ;
-                    totalDY += motY;
-
-                    // 状态推进（下一 tick 的携带值）
-                    if (onLadder) {
-                        motY = LADDER_CLIMB;
-                    } else if (jumpedTick) {
-                        motY = (motY - GRAVITY) * VERTICAL_DRAG;
-                    } else if (ground) {
-                        motY = 0.0;
-                    } else if (inWeb) {
-                        motY = (motY - GRAVITY) * VERTICAL_DRAG;
-                    } else if (inLiquid) {
-                        motY = motY * LIQUID_DRAG - LIQUID_GRAVITY;
-                    } else {
-                        motY = (motY - GRAVITY) * VERTICAL_DRAG;
-                    }
-                    ground = false;
+                    list.add(new Candidate(totalDX, totalDZ, totalDY,
+                            speedLabels[s] + (jumpOnTick0 ? "+jump" : "") + "x" + ticks
+                                    + "+strafe=" + (int) strafes[st]));
+                    // 重置状态以进行下一个 strafe 方向的完整模拟
+                    motX = motionX;
+                    motZ = motionZ;
+                    motY = motionY;
+                    totalDX = 0.0;
+                    totalDZ = 0.0;
+                    totalDY = 0.0;
+                    ground = onGround;
                 }
-
-                list.add(new Candidate(totalDX, totalDZ, totalDY,
-                        speedLabels[s] + (jumpOnTick0 ? "+jump" : "") + "x" + ticks));
             }
         }
         return list.toArray(new Candidate[0]);

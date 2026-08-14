@@ -52,11 +52,11 @@ class PredictionEngineTest {
         PredictionEngine.Candidate[] cands = PredictionEngine.candidates(
             0.0, 0.0, true, 0f, 0.6, true, 0, 0
         );
-        // {idle, walk, sprint, sneak} x {no-jump, jump} = 8
-        assertEquals(8, cands.length);
+        // {idle, walk, sprint, sneak} x {no-jump, jump} x {strafe 0, -1, 1} = 24
+        assertEquals(24, cands.length);
         boolean found = false;
         for (PredictionEngine.Candidate c : cands) {
-            if ("sprint+jump".equals(c.label)) {
+            if (c.label.startsWith("sprint+jump")) {
                 assertEquals(0.42, c.motionY, 0.01);
                 found = true;
             }
@@ -71,7 +71,7 @@ class PredictionEngineTest {
         );
         boolean found = false;
         for (PredictionEngine.Candidate c : cands) {
-            if ("idle".equals(c.label)) {
+            if (c.label.startsWith("idle+strafe=0")) {
                 assertEquals(0.0, c.deltaX, 1e-9);
                 assertEquals(0.0, c.deltaZ, 1e-9);
                 found = true;
@@ -236,7 +236,7 @@ class PredictionEngineTest {
 
     private static PredictionEngine.Candidate findLabel(PredictionEngine.Candidate[] cands, String label) {
         for (PredictionEngine.Candidate c : cands) {
-            if (label.equals(c.label)) {
+            if (c.label.startsWith(label)) {
                 return c;
             }
         }
