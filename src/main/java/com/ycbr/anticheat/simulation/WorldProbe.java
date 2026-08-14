@@ -111,17 +111,19 @@ public final class WorldProbe {
     /**
      * 台阶/楼梯步进产生的垂直位移是否在合理步高内（|dy| ≤ 0.6，覆盖 0.5 半砖）。
      * 仅当脚下确实是台阶/楼梯地形时生效，平地/飞行不豁免。
+     * 判定委托 {@link KnownExemptions#stepVerticalAllowed}（Phase 9 集中化）。
      */
     public static boolean stepVerticalAllowed(double actualDY, boolean onStepTerrain) {
-        return onStepTerrain && Math.abs(actualDY) <= 0.6D;
+        return KnownExemptions.stepVerticalAllowed(actualDY, onStepTerrain);
     }
 
     /**
      * 粘液块弹跳豁免：1.8 粘液块落地反弹（下落速度反跳约 1.5 倍），
      * 引擎无弹跳模型，|dy| 可达 ~0.6（起跳反弹 0.42×1.5≈0.63）。
      * 仅当脚下确为粘液块时生效；作弊者垂直速度 &gt;0.65 仍会被抓。
+     * 判定委托 {@link KnownExemptions#slimeBounceAllowed}（Phase 9 集中化）。
      */
     public static boolean slimeBounceAllowed(double actualDY, boolean onSlime) {
-        return onSlime && Math.abs(actualDY) <= 0.65D;
+        return KnownExemptions.slimeBounceAllowed(actualDY, onSlime);
     }
 }

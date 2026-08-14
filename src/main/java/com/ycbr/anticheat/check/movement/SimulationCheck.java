@@ -6,6 +6,7 @@ import com.ycbr.anticheat.core.AntiCheatManager;
 import com.ycbr.anticheat.data.MovementTracker;
 import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.MoveContext;
+import com.ycbr.anticheat.simulation.KnownExemptions;
 import com.ycbr.anticheat.simulation.PredictionEngine;
 import com.ycbr.anticheat.simulation.ShadowPlayer;
 import com.ycbr.anticheat.simulation.WorldProbe;
@@ -74,20 +75,20 @@ public final class SimulationCheck extends Check {
         double hTol = sd("sim-speed.horizontal-tolerance", 0.01D, 0.005D);
         double vTol = sd("sim-fly.vertical-tolerance", 0.02D, 0.01D);
 
-        // 液体/网/梯子预测精度下降：容差放大，防误判
-        if (probe.inLiquid || probe.inWeb || probe.onLadder) {
+        // liquid/web/ladder precision drops: widen tolerance (exemption via KnownExemptions)
+        if (KnownExemptions.isMediumExempt(probe)) {
             double mult = sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
             hTol *= mult;
             vTol *= mult;
         }
         // 活塞推动豁免：位移由活塞外部驱动（可与输入叠加），sim-speed 容差放大
-        if (probe.onPiston) {
+        if (KnownExemptions.isPistonExempt(probe)) {
             double mult = sd("sim-speed.piston-tolerance-multiplier", 3.0D, 3.0D);
             hTol *= mult;
         }
-        if (ticks > 1) {
-            hTol *= Math.sqrt(ticks);
-            vTol *= Math.sqrt(ticks);
+        if (KnownExemptions.multiTickSqrtFactor(ticks) > 1.0) {
+            hTol *= KnownExemptions.multiTickSqrtFactor(ticks);
+            vTol *= KnownExemptions.multiTickSqrtFactor(ticks);
         }
 
         // 水平：模长匹配（方向无关，抗斜向/侧移误判）。idle 候选覆盖静止。
