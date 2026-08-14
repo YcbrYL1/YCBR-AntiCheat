@@ -252,6 +252,7 @@ public final class MainThreadHandler implements Runnable {
                 || belowMat == Material.LADDER || belowMat == Material.VINE;
         data.blockBelowUnstandable = unstandable(belowMat);
         data.blockOnStairsOrSlab = WorldProbe.isStepMaterial(belowMat) || WorldProbe.isStepMaterial(feetMat);
+        data.blockOnPiston = feetMat == Material.PISTON_MOVING_PIECE || belowMat == Material.PISTON_MOVING_PIECE;
         Block top = feet.getRelative(BlockFace.UP, 2);
         data.blockBoxedIn = belowMat.isSolid() && top.getType().isSolid() && !data.blockOnSlime;
     }

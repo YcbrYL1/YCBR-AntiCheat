@@ -78,6 +78,11 @@ public final class SimulationCheck extends Check {
             hTol *= mult;
             vTol *= mult;
         }
+        // 活塞推动豁免：位移由活塞外部驱动（可与输入叠加），sim-speed 容差放大
+        if (probe.onPiston) {
+            double mult = sd("sim-speed.piston-tolerance-multiplier", 3.0D, 3.0D);
+            hTol *= mult;
+        }
         if (ticks > 1) {
             hTol *= Math.sqrt(ticks);
             vTol *= Math.sqrt(ticks);

@@ -3,8 +3,12 @@ package com.ycbr.anticheat.simulation;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.UUID;
+
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
+
+import com.ycbr.anticheat.data.PlayerData;
 
 class WorldProbeStepTest {
 
@@ -81,5 +85,21 @@ class WorldProbeStepTest {
     void slimeBounceAllowed_flatTerrain_rejected() {
         assertFalse(WorldProbe.slimeBounceAllowed(0.6, false));
         assertFalse(WorldProbe.slimeBounceAllowed(0.3, false));
+    }
+
+    // ---- 活塞推动豁免 ----
+
+    @Test
+    void pistonMovingPiece_below_isExempted() {
+        PlayerData data = new PlayerData(UUID.randomUUID());
+        data.blockOnPiston = true;
+        assertTrue(WorldProbe.fromPlayerData(data).onPiston);
+    }
+
+    @Test
+    void normalSurface_notExempted() {
+        PlayerData data = new PlayerData(UUID.randomUUID());
+        data.blockOnPiston = false;
+        assertFalse(WorldProbe.fromPlayerData(data).onPiston);
     }
 }

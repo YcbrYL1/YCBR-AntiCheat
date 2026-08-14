@@ -142,6 +142,9 @@ public final class PlayerData {
     /** 脚下/脚所在方块是台阶或楼梯（允许 ≤0.6 的自动步进垂直位移）。 */
     public volatile boolean blockOnStairsOrSlab;
 
+    /** 脚下/脚所在方块是活塞臂实体（PISTON_MOVING_PIECE）：位移由活塞外部驱动。 */
+    public volatile boolean blockOnPiston;
+
     public volatile boolean clientOnGround;
     public volatile boolean prevClientOnGround;
 

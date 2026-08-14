@@ -32,9 +32,10 @@ public final class WorldProbe {
         public boolean onLadder;
         public boolean headBlocked;
         public boolean belowUnstandable;
+        public boolean onPiston;
 
         public boolean anySpecial() {
-            return inLiquid || inWeb || onLadder || headBlocked || belowUnstandable
+            return inLiquid || inWeb || onLadder || headBlocked || belowUnstandable || onPiston
                     || surface != Surface.NORMAL;
         }
     }
@@ -60,6 +61,7 @@ public final class WorldProbe {
         r.onLadder = data.blockOnLadder;
         r.headBlocked = data.blockBoxedIn;
         r.belowUnstandable = data.blockBelowUnstandable;
+        r.onPiston = data.blockOnPiston;
         return r;
     }
 
