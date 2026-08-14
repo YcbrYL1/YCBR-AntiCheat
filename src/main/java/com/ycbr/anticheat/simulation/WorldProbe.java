@@ -1,5 +1,7 @@
 package com.ycbr.anticheat.simulation;
 
+import org.bukkit.Material;
+
 import com.ycbr.anticheat.data.PlayerData;
 
 /**
@@ -59,5 +61,46 @@ public final class WorldProbe {
         r.headBlocked = data.blockBoxedIn;
         r.belowUnstandable = data.blockBelowUnstandable;
         return r;
+    }
+
+    /**
+     * 该方块是否属于"台阶/楼梯"类（玩家可自动步进 0.5 高度的地形）。
+     * 1.8 半砖与楼梯：走过时 motY 会短暂达到 ±0.5，模拟引擎无步进模型，
+     * 若不豁免会被 sim-fly 误判。
+     */
+    public static boolean isStepMaterial(Material m) {
+        if (m == null) {
+            return false;
+        }
+        switch (m) {
+        case STEP:
+        case WOOD_STEP:
+        case DOUBLE_STEP:
+        case WOOD_DOUBLE_STEP:
+        case WOOD_STAIRS:
+        case COBBLESTONE_STAIRS:
+        case BRICK_STAIRS:
+        case SMOOTH_STAIRS:
+        case NETHER_BRICK_STAIRS:
+        case SANDSTONE_STAIRS:
+        case SPRUCE_WOOD_STAIRS:
+        case BIRCH_WOOD_STAIRS:
+        case JUNGLE_WOOD_STAIRS:
+        case QUARTZ_STAIRS:
+        case ACACIA_STAIRS:
+        case DARK_OAK_STAIRS:
+        case RED_SANDSTONE_STAIRS:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    /**
+     * 台阶/楼梯步进产生的垂直位移是否在合理步高内（|dy| ≤ 0.6，覆盖 0.5 半砖）。
+     * 仅当脚下确实是台阶/楼梯地形时生效，平地/飞行不豁免。
+     */
+    public static boolean stepVerticalAllowed(double actualDY, boolean onStepTerrain) {
+        return onStepTerrain && Math.abs(actualDY) <= 0.6D;
     }
 }
