@@ -199,3 +199,16 @@
 | P3 战斗统计/ML | 高 | 中高 | 补齐第二短板，接近 MX 水平 | ML 数据集偏差风险（启发式保底） |
 
 **一句话路线**：先建 Transaction/灵敏度/统计三件套（P0）→ 把 `SimulationCheck` 补成真 Grim（P1）→ Timer/Blink/Velocity 事务化（P2）→ KillAura/FastClick/Reach 加统计层与可选 ML（P3）。
+
+---
+
+## 九、Phase 5 收敛记录（2026-08-14）
+
+| 蓝图项 | 状态 | 说明 |
+|--------|------|------|
+| P0.1 Transaction / 延迟处理器 | ✅ 已覆盖（Phase 2） | `TransactionTracker` 落地，Timer/Blink/Velocity 已事务化 |
+| P1.1 世界交互层（液体/网/梯子） | ✅ 已覆盖（Phase 1/4/5） | `WorldProbe` 液体/网/梯子/台阶楼梯/粘液弹跳（`slimeBounceAllowed`，`09bf428`）|
+| P1.1 剩余：活塞推动、粘液块弹射 | ✅ 粘液弹射已补；⬜ 活塞推动剩余 | 1.8 粘液块落地反弹豁免 0.65 包络；活塞推动为罕见场景，容差兜底 |
+| P1.1 剩余：0.03 跳过 tick、末影珍珠、船/载具 | ⬜ 剩余（载具已豁免 `inVehicle`，末影珍珠=传送已由 shadow reset 覆盖） | 低频场景，暂缓 |
+| P2.2 Blink PacketOrder | ✅ Phase 5 补重放 burst 确认 | `BlinkLogic`（`cf01afa`）：活体 pong 静默 + 突发补发双条件，默认关 |
+| P3.6 Scaffold 协议校验 | ✅ 已覆盖（Phase 1 + 现状） | `invalid-place`/`fabricated` 协议级子项已在，`cadence` 行为级默认关 |

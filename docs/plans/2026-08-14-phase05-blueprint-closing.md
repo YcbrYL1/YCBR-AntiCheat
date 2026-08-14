@@ -479,3 +479,23 @@ git commit -m "docs: Phase 5 results + blueprint coverage updates"
 - **reachMod 误伤擦边玩家**（任务 3）：收缩步进 0.05、上限 0.5、正常攻击衰减——擦边但合法玩家会周期性 cleanAttack 衰减，不会累计误判；默认关。
 - **粘液弹跳包络 0.65**（任务 4）：1.8 粘液块反弹系数为 ~1.5× 下落速度；若实机仍有误判可调 0.65 → 0.75；作弊者垂直速度 >1.0 仍会被抓。
 - **不改动护城河**：Velocity JumpReset/SprintReset、KillAura 交叉门控、Timer TPS 归一化（Phase 4）保持不动。
+
+---
+
+## ✅ 实施结果（2026-08-14）
+
+| 任务 | 提交 | 测试 | 状态 |
+|------|------|------|------|
+| 1. Blink 重放 burst 确认 | `cf01afa` | BlinkLogicTest +4（89/89） | ✅ 完成 |
+| 2. strafe 候选 + 方向匹配 | `7bd0c57` | PredictionEngineStrafeTest +5（94/94） | ✅ 完成 |
+| 3. Reach reachMod 动态收缩 | `f1e388f` | ReachModLogicTest +4（98/98） | ✅ 完成 |
+| 4. 粘液块弹跳豁免 | `09bf428` | WorldProbeStepTest +3（101/101） | ✅ 完成 |
+| 5. 文档回填 + 蓝图勾选 | 本次提交 | 101/101 + 打包 252966 字节 | ✅ 完成 |
+
+**偏离计划的决策：**
+- 任务 1：`BlinkLogic` 增加 `burstWindowRemaining` 窗口（静默达标后保持 N 包判定），因为静默标记只出现在静默后第一包，而 burst 判定需要连续 8 包——测试暴露后修复。
+- 任务 2：镜像测试断言修正（yaw=0 时 strafe 只改变 deltaZ，不改变 deltaX）；现有 `PredictionEngineTest` 适配 24 候选（`assertEquals(8→24)`、标签改前缀匹配）。
+- 任务 4：粘液弹跳为唯一直接生效项（消除已知误判源）；其余全部默认关观察。
+- 蓝图勾选结论：8AC P3.4（Scaffold 批处理）→ cadence 已存在且默认关，视为已覆盖；Grim/MX P3.6 → invalid-place/fabricated 协议级子项已在。剩余未覆盖：活塞推动/0.03 跳过 tick/末影珍珠（传送已覆盖）、PhysicsConstants 集中化、KnownExemptions 集中化。
+
+**验证方式：** `mvn test` 101/101 全绿；`mvn -q -DskipTests package` 产出 YCBR.jar（252966 字节）。

@@ -415,3 +415,16 @@ public final class PhysicsConstants {
 - **下月**：P3（AimStatisticsCheck + FastClick 增强 + Reach 升级 + Scaffold 批处理）
 
 **一句话**：先接 TransactionTracker 堵 Timer/Blink/ Velocity 三大高危，再开 SimulationCheck 补移动短板，最后上战斗统计层——按此顺序，YCBR-AC 的检测能力与误判控制可追平 NCP 级，在战斗行为领域保持领先。
+
+---
+
+## 10. Phase 5 收敛记录（2026-08-14）
+
+| 蓝图项 | 状态 | 说明 |
+|--------|------|------|
+| P1 Blink 改写（pong 检测 + 包序号） | ✅ Phase 2 已做 pong 检测；**Phase 5 补重放 burst 确认** | `BlinkLogic`（`cf01afa`）：静默期（活体 pong）+ 突发补发（连续 8 包 ≤25ms）双条件，默认关 |
+| P2.1 SimulationCheck 方向匹配 + strafe 候选扩展 | ✅ Phase 5 | `PredictionEngine.candidates` 扩展至 24 候选（4 speeds × 2 jumps × 3 strafe）；方向匹配夹角 ≤30°（ticks≥3 放宽 45°），config `sim-speed.direction-match` 默认关（`7bd0c57`） |
+| P3.3 Reach 动态收缩 reachMod | ✅ Phase 5 | `ReachModLogic`：边缘连击 8 次收缩 0.05、上限 0.5、正常攻击 ×0.8 衰减，config `reach.reach-mod` 默认关（`f1e388f`） |
+| P3.4 Scaffold 批处理统计 | ✅ 已覆盖 | `cadence` 子项已存在（Phase 1，默认关），批量统计思想已实现 |
+| 7.1 PhysicsConstants 物理常量集中化 | ⬜ 剩余 | 纯重构、收益低、改动面大，暂缓 |
+| 7.2 KnownExemptions 豁免系统 | 🟡 雏形 | `stepVerticalAllowed`（Phase 4）/`slimeBounceAllowed`（Phase 5）已分散实现，集中化为注册表形式未做 |
