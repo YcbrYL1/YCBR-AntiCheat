@@ -37,6 +37,20 @@ public final class PlayerData {
     public volatile long lastPacketTime;
     public volatile long lastActive;
 
+    // 视角历史环（Reach 多帧枚举专用，独立于 KillAura 的 prevYaw 状态）
+    public static final int ROT_HIST_SIZE = 4;
+    public final double[] rotHistYaw = new double[ROT_HIST_SIZE];
+    public final double[] rotHistPitch = new double[ROT_HIST_SIZE];
+    public final int[] rotHistTick = new int[ROT_HIST_SIZE];
+    public volatile int rotHistHead;
+
+    public void pushRotation(double yaw, double pitch, int serverTick) {
+        rotHistHead = (rotHistHead + 1) % ROT_HIST_SIZE;
+        rotHistYaw[rotHistHead] = yaw;
+        rotHistPitch[rotHistHead] = pitch;
+        rotHistTick[rotHistHead] = serverTick;
+    }
+
     public volatile int ping;
     public volatile int speedLevel;
     public volatile int jumpLevel;
