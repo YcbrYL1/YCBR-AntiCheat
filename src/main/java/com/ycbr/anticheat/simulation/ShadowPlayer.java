@@ -123,7 +123,7 @@ public final class ShadowPlayer {
         if (onLadder) {
             motY = PredictionEngine.LADDER_CLIMB;
         } else if (jump) {
-            motY = PredictionEngine.JUMP_VELOCITY + jumpLevel * 0.1;
+            motY = PredictionEngine.JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
             if (headBlocked) {
                 motY = Math.min(motY, PredictionEngine.HEAD_BLOCKED_JUMP_CAP);
             }

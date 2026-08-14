@@ -31,47 +31,27 @@ public final class PredictionEngine {
 
     private PredictionEngine() {}
 
-    /** generic.movementSpeed 基础值（EntityHuman.initAttributes:272） */
-    public static final double BASE_SPEED = 0.1;
-    /** 空中加速度 aM（EntityLiving 字段，默认 0.02F） */
-    public static final double AIR_ACCEL = 0.02;
-    /** 重力（EntityLiving.g: motY -= 0.08） */
-    public static final double GRAVITY = 0.08;
-    /** 垂直拖拽（motY *= 0.98） */
-    public static final double VERTICAL_DRAG = 0.98;
-    /** 空气/水平摩擦基数（onGround ? slipperiness*0.91 : 0.91） */
-    public static final double AIR_FRICTION = 0.91;
-    /** 地面加速度换算常量（0.16277136 / f5^3） */
-    public static final double ACCEL_FACTOR = 0.16277136;
-    /** 跳跃初速度（EntityLiving.bF: motY = 0.42） */
-    public static final double JUMP_VELOCITY = 0.42;
-    /** 疾跑速度修饰（操作码 2，+30%） */
-    public static final double SPRINT_MODIFIER = 1.3;
-    /** 疾跑跳跃水平冲量（bF: motX -= sin*0.2; motZ += cos*0.2） */
-    public static final double SPRINT_JUMP_IMPULSE = 0.2;
-    /** 潜行减速因子（客户端施加） */
-    public static final double SNEAK_FACTOR = 0.3;
-    /** 使用物品减速（NMS 1.8 EntityHuman: 使用物品时 motX/Z *= 0.2） */
-    public static final double USING_ITEM_FACTOR = 0.2;
-    /** 速度药水每级加算（NMS 操作码 0，+0.2/级） */
-    public static final double SPEED_POTION_PER_LEVEL = 0.2;
-    /** 水中水平摩擦/拖拽（NMS 水分支 motX/Z *= 0.8） */
-    public static final double LIQUID_DRAG = 0.8;
-    /** 水中垂直拖拽后减量（NMS 水分支 motY *= 0.8 后 motY -= 0.02） */
-    public static final double LIQUID_GRAVITY = 0.02;
-    /** 水中输入加速度系数（NMS 水分支 f5 = bI()*0.02；贴地疾跑 *0.1） */
-    public static final double LIQUID_INPUT_FACTOR = 0.02;
-    /** 水中上浮加速（按住跳跃键 motY += 0.04） */
-    public static final double LIQUID_SWIM_UP = 0.04;
-    /** 蜘蛛网阻尼（Entity.move: *= 0.105） */
-    public static final double WEB_DAMP = 0.105;
-    /** 梯子爬升速度（EntityLiving 梯子分支 motY = 0.15） */
-    public static final double LADDER_CLIMB = 0.15;
-    /** 头顶被挡时跳跃上限（简化碰撞：跳不起高） */
-    public static final double HEAD_BLOCKED_JUMP_CAP = 0.3;
-
-    /** 墙碰撞截断生效上限：墙距 ≥ 此值视为无墙（吸收主线程探测 1 tick 滞后误差）。 */
-    public static final double WALL_TRUNCATION_LIMIT = 0.65;
+    /** All physics constants delegate to {@link PhysicsConstants} (Phase 9 centralization). */
+    public static final double BASE_SPEED = PhysicsConstants.BASE_SPEED;
+    public static final double AIR_ACCEL = PhysicsConstants.AIR_ACCEL;
+    public static final double GRAVITY = PhysicsConstants.GRAVITY;
+    public static final double VERTICAL_DRAG = PhysicsConstants.VERTICAL_DRAG;
+    public static final double AIR_FRICTION = PhysicsConstants.AIR_FRICTION;
+    public static final double ACCEL_FACTOR = PhysicsConstants.ACCEL_FACTOR;
+    public static final double JUMP_VELOCITY = PhysicsConstants.JUMP_VELOCITY;
+    public static final double SPRINT_MODIFIER = PhysicsConstants.SPRINT_MODIFIER;
+    public static final double SPRINT_JUMP_IMPULSE = PhysicsConstants.SPRINT_JUMP_IMPULSE;
+    public static final double SNEAK_FACTOR = PhysicsConstants.SNEAK_FACTOR;
+    public static final double USING_ITEM_FACTOR = PhysicsConstants.USING_ITEM_FACTOR;
+    public static final double SPEED_POTION_PER_LEVEL = PhysicsConstants.SPEED_POTION_PER_LEVEL;
+    public static final double LIQUID_DRAG = PhysicsConstants.LIQUID_DRAG;
+    public static final double LIQUID_GRAVITY = PhysicsConstants.LIQUID_GRAVITY;
+    public static final double LIQUID_INPUT_FACTOR = PhysicsConstants.LIQUID_INPUT_FACTOR;
+    public static final double LIQUID_SWIM_UP = PhysicsConstants.LIQUID_SWIM_UP;
+    public static final double WEB_DAMP = PhysicsConstants.WEB_DAMP;
+    public static final double LADDER_CLIMB = PhysicsConstants.LADDER_CLIMB;
+    public static final double HEAD_BLOCKED_JUMP_CAP = PhysicsConstants.HEAD_BLOCKED_JUMP_CAP;
+    public static final double WALL_TRUNCATION_LIMIT = PhysicsConstants.WALL_TRUNCATION_LIMIT;
 
     /**
      * 水平墙碰撞截断（2D 逐轴近似，1.8 Entity.move 逐轴碰撞语义）。
@@ -192,7 +172,7 @@ public final class PredictionEngine {
         // 跳跃（NMS bF()：仅地面、非液体、非梯子、非蛛网）
         boolean jumped = jumping && onGround && !inLiquid && !onLadder && !inWeb;
         if (jumped) {
-            motY = JUMP_VELOCITY + jumpLevel * 0.1;
+            motY = JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
             if (headBlocked) {
                 motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
             }
@@ -210,7 +190,7 @@ public final class PredictionEngine {
         double inputSpeed;
         if (inLiquid) {
             // NMS 水分支：f4 = onGround&&sprint ? 0.1 : 0.02; f5 = bI()*f4
-            inputSpeed = baseSpeed * ((onGround && sprinting) ? 0.1 : LIQUID_INPUT_FACTOR);
+            inputSpeed = baseSpeed * ((onGround && sprinting) ? PhysicsConstants.LIQUID_GROUND_SPRINT_FACTOR : LIQUID_INPUT_FACTOR);
         } else if (onGround) {
             inputSpeed = baseSpeed * f6;
         } else {
@@ -332,7 +312,7 @@ public final class PredictionEngine {
                 double baseMotY = motionY;
 
                 if (jump && !inLiquid && !onLadder && !inWeb) {
-                    baseMotY = JUMP_VELOCITY + jumpLevel * 0.1;
+                    baseMotY = JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
                     if (headBlocked) {
                         baseMotY = Math.min(baseMotY, HEAD_BLOCKED_JUMP_CAP);
                     }
@@ -348,7 +328,7 @@ public final class PredictionEngine {
                         * (sprintRow ? SPRINT_MODIFIER : 1.0);
                 double inputSpeed;
                 if (inLiquid) {
-                    inputSpeed = baseSpeed * ((onGround && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
+                    inputSpeed = baseSpeed * ((onGround && sprintRow) ? PhysicsConstants.LIQUID_GROUND_SPRINT_FACTOR : LIQUID_INPUT_FACTOR);
                 } else if (onGround) {
                     inputSpeed = baseSpeed * f6;
                 } else {
@@ -487,7 +467,7 @@ public final class PredictionEngine {
 
                         boolean jumpedTick = (t == 0 && jumpOnTick0 && !inLiquid && !onLadder && !inWeb);
                         if (jumpedTick) {
-                            motY = JUMP_VELOCITY + jumpLevel * 0.1;
+                            motY = JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
                             if (headBlocked) {
                                 motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
                             }
@@ -502,7 +482,7 @@ public final class PredictionEngine {
                                 * (sprintRow ? SPRINT_MODIFIER : 1.0);
                         double inputSpeed;
                         if (inLiquid) {
-                            inputSpeed = baseSpeed * ((ground && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
+                            inputSpeed = baseSpeed * ((ground && sprintRow) ? PhysicsConstants.LIQUID_GROUND_SPRINT_FACTOR : LIQUID_INPUT_FACTOR);
                         } else if (ground) {
                             inputSpeed = baseSpeed * f6;
                         } else {

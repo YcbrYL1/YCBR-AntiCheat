@@ -6,6 +6,7 @@ import com.ycbr.anticheat.core.AntiCheatManager;
 import com.ycbr.anticheat.data.MovementTracker;
 import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.MoveContext;
+import com.ycbr.anticheat.simulation.PhysicsConstants;
 import com.ycbr.anticheat.util.MathUtil;
 
 /**
@@ -61,8 +62,9 @@ public final class FlyCheck extends Check {
                 + (m.airTicks < 45 ? sd("rise.jump-tolerance", 0.05D, 0.02D)
                         : sd("rise.full-tolerance", 0.02D, 0.005D));
         if (m.airTicks < 45) {
-            expected += Math.max(0.12D, 0.42D * Math.pow(0.98D, m.airTicks))
-                    + data.jumpLevel * (isStrict() ? 0.05D : 0.1D);
+            expected += Math.max(0.12D, PhysicsConstants.JUMP_VELOCITY
+                    * Math.pow(PhysicsConstants.VERTICAL_DRAG, m.airTicks))
+                    + data.jumpLevel * (isStrict() ? 0.05D : PhysicsConstants.JUMP_POTION_PER_LEVEL);
         }
         if (m.nearLiquidTicks > 0) {
             expected += 0.1D;

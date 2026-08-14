@@ -12,11 +12,11 @@ import com.ycbr.anticheat.data.PlayerData;
 public final class WorldProbe {
 
     public enum Surface {
-        NORMAL(0.6),
-        ICE(0.98),
-        SLIME(0.8),
-        SOUL_SAND(0.4),
-        AIR(0.91);
+        NORMAL(PhysicsConstants.SLIPPERINESS_NORMAL),
+        ICE(PhysicsConstants.SLIPPERINESS_ICE),
+        SLIME(PhysicsConstants.SLIPPERINESS_SLIME),
+        SOUL_SAND(PhysicsConstants.SLIPPERINESS_SOUL_SAND),
+        AIR(PhysicsConstants.AIR_FRICTION);
 
         public final double friction;
 
