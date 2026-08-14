@@ -51,6 +51,10 @@ public final class YCBRConfig {
         return raw().getDouble(path, def);
     }
 
+    public boolean b(String path, boolean def) {
+        return raw().getBoolean(path, def);
+    }
+
     public int i(String path, int def) {
         return raw().getInt(path, def);
     }
