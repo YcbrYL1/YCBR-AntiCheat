@@ -313,9 +313,17 @@ public final class AsyncPacketListener {
             }
         }
         final int fAction = action;
-        final int fBlocked = blockedStates(player, data);
+        final Player fPlayer = player;
+        final long usingItemTimeout = manager.config().raw()
+                .getLong("settings.using-item-timeout-ms", 1500L);
         data.actor.submit(() -> {
             long now = System.currentTimeMillis();
+            // usingItem 超时复位：客户端中途退出物品使用（不发 dig status 5）时
+            // 卡 true 会污染 blockedStates → Sprint 误判；先复位再算状态。
+            if (data.usingItem && ItemUseLogic.expired(now, data.lastItemUseTime, usingItemTimeout)) {
+                data.usingItem = false;
+            }
+            int blocked = blockedStates(fPlayer, data);
             if (fAction == 3) {
                 data.lastSprintStartTime = now;
                 data.movement.sprinting = true;
@@ -327,7 +335,7 @@ public final class AsyncPacketListener {
             if (fAction == 5) {
                 manager.getRegistry().onRidingJump(data, now);
             } else {
-                manager.getRegistry().onSprintAction(data, fAction, fBlocked);
+                manager.getRegistry().onSprintAction(data, fAction, blocked);
             }
         });
     }

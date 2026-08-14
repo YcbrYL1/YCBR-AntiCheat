@@ -45,4 +45,20 @@ class ItemUseLogicTest {
     void null_doesNotTriggerItemUse() {
         assertFalse(ItemUseLogic.isUseItem(null));
     }
+
+    // ---- usingItem 超时复位（Sprint 残留 FP：客户端中途退出物品使用不发 dig status 5）----
+
+    @Test
+    void expired_afterTimeout() {
+        long now = 10_000L;
+        assertTrue(ItemUseLogic.expired(now, now - 1600L, 1500L), "超时后应过期");
+        assertTrue(ItemUseLogic.expired(now, now - 1500L, 1500L), "恰好超时应过期");
+    }
+
+    @Test
+    void expired_withinTimeout() {
+        long now = 10_000L;
+        assertFalse(ItemUseLogic.expired(now, now - 100L, 1500L), "窗口内不应过期");
+        assertFalse(ItemUseLogic.expired(now, 0L, 1500L), "从未使用不应过期");
+    }
 }

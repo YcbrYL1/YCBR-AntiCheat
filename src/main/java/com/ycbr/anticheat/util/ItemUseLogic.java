@@ -37,4 +37,13 @@ public final class ItemUseLogic {
             return false;
         }
     }
+
+    /**
+     * usingItem 超时复位：客户端中途退出物品使用（不发 BLOCK_DIG status 5）时，
+     * usingItem 会卡 true 导致 Sprint/NoSlow 状态误判。超过 timeoutMs 未再使用
+     * 即视为过期，调用方应置 usingItem = false。
+     */
+    public static boolean expired(long now, long lastUseTime, long timeoutMs) {
+        return lastUseTime > 0L && now - lastUseTime >= timeoutMs;
+    }
 }

@@ -16,6 +16,7 @@ settings:
   auth-premium-players: []
   strict-mode: false
   ycbrop-players: []
+  using-item-timeout-ms: 1500
   dataset:
     enabled: false
   bot-verification:
