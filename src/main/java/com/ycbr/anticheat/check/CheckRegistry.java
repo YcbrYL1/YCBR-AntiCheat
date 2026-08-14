@@ -12,6 +12,7 @@ import com.ycbr.anticheat.check.combat.FastClickCheck;
 import com.ycbr.anticheat.check.combat.KillAuraCheck;
 import com.ycbr.anticheat.check.combat.ReachCheck;
 import com.ycbr.anticheat.check.combat.ScaffoldCheck;
+import com.ycbr.anticheat.check.combat.aim.AimStatisticsCheck;
 import com.ycbr.anticheat.check.movement.FlyCheck;
 import com.ycbr.anticheat.check.movement.NoFallCheck;
 import com.ycbr.anticheat.check.movement.NoSlowCheck;
@@ -40,6 +41,7 @@ public final class CheckRegistry {
     private final KillAuraCheck killAura;
     private final ProtocolCheck protocol;
     private final AutoToolCheck autoTool;
+    private final AimStatisticsCheck aimStat;
 
     public CheckRegistry(AntiCheatManager manager) {
         wrongTurn = new WrongTurnCheck(manager);
@@ -48,6 +50,7 @@ public final class CheckRegistry {
         killAura = new KillAuraCheck(manager);
         protocol = new ProtocolCheck(manager);
         autoTool = new AutoToolCheck(manager);
+        aimStat = new AimStatisticsCheck(manager);
         add(killAura);
         add(new ScaffoldCheck(manager));
         add(new SpeedCheck(manager));
@@ -63,6 +66,7 @@ public final class CheckRegistry {
         add(new FastClickCheck(manager));
         add(new ReachCheck(manager));
         add(new SimulationCheck(manager));
+        add(aimStat);
         add(protocol);
         add(wrongTurn);
         add(blink);
@@ -128,6 +132,7 @@ public final class CheckRegistry {
         }
         wrongTurn.checkRotation(data, yaw, pitch);
         killAura.checkPendingAngles(data, yaw, pitch);
+        aimStat.onRotation(data, yaw, pitch);
     }
 
     public void onLook(PlayerData data, boolean onGround) {

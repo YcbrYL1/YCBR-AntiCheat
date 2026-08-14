@@ -285,6 +285,24 @@ checks:
       vl-before-flag: 10
       strict:
         vertical-tolerance: 0.01
+  aimstat:
+    enabled: false
+    kick-at-vl: 20
+    kick-message: "&cKicked for AimStat"
+    entropy-max: 1.5
+    iqr-min: 0.0005
+    ks-min-uniform: 0.15
+    jiff-pattern-len: 3
+    jiff-max: 2
+    zscore-threshold: 4.0
+    kurtosis-max: -0.5
+    signal-fresh-ms: 10000
+    vl-before-flag: 6
+    strict:
+      entropy-max: 1.0
+      iqr-min: 0.001
+      ks-min-uniform: 0.2
+      zscore-threshold: 3.5
   fly:
     enabled: true
     kick-at-vl: 20
