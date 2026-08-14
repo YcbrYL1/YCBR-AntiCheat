@@ -61,7 +61,8 @@ public final class AimStatsLogic {
             hits.add("jiff");
         }
 
-        if (!Statistics.zScoreOutliers(deltas, zscoreThreshold).isEmpty()) {
+        // z-score：需≥3 个离群（持续转枪/连拍），单次真人 flick 不算
+        if (Statistics.zScoreOutliers(deltas, zscoreThreshold).size() >= 3) {
             hits.add("zscore");
         }
 

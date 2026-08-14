@@ -10,6 +10,8 @@ public final class FastClickCheck extends Check {
 
     private static final long CLEANUP_WINDOW_MS = 1000L;
 
+    private final FastClickLogic logic = new FastClickLogic();
+
     public FastClickCheck(AntiCheatManager manager) {
         super(CheckType.FASTCLICK, manager);
     }
@@ -45,5 +47,14 @@ public final class FastClickCheck extends Check {
         } else {
             drain(data, "fastclick", 0.1D);
         }
+        if (data.lastAttackTime > 0) {
+            logic.feed(Math.max(1L, now - data.lastAttackTime));
+            if (logic.sampleCount() >= 40 && logic.mechanicalPattern(d("mechanical.kurtosis-max", -1.0D))) {
+                if (bump(data, "mechanical", 1D, i("mechanical.vl-before-flag", 3))) {
+                    flag(data, "Mechanical", "kurtosis/entropy click rhythm");
+                }
+            }
+        }
+        data.lastAttackTime = now;
     }
 }

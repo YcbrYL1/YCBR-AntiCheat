@@ -47,12 +47,15 @@ class AimStatsLogicTest {
         return xs;
     }
 
-    /** 真人瞄准：尖峰分布（小步长为主，含偶发大转），符合高斯样分布。 */
+    /** 真人瞄准：尖峰右偏分布（小步长为主，偶发小 flick），峰度应为正。 */
     private List<Double> organic(boolean seeded) {
         List<Double> xs = new ArrayList<Double>();
         Random rnd = seeded ? new Random(42L) : new Random();
         for (int i = 0; i < 60; i++) {
-            double v = 0.1D + Math.abs(rnd.nextGaussian() * 0.4D) + rnd.nextDouble() * 0.6D;
+            double v = Math.abs(rnd.nextGaussian() * 0.08D) + rnd.nextDouble() * 0.05D;
+            if (rnd.nextInt(30) == 0) {
+                v += 0.3D + rnd.nextDouble() * 0.5D; // 偶发小 flick（<1°）
+            }
             if (v >= 30.0D) {
                 v = 29.9D;
             }
@@ -116,5 +119,20 @@ class AimStatsLogicTest {
     void organic_neverFlaggedAsKs() {
         assertFalse(evaluate(organic(true)).contains("ks"),
                 "peaked human aim should not look uniform");
+    }
+
+    @Test
+    void repeatedSnaps_flagsZscore() {
+        List<Double> xs = new ArrayList<Double>();
+        Random rnd = new Random(3L);
+        for (int i = 0; i < 60; i++) {
+            if (rnd.nextInt(8) == 0) {
+                xs.add(3.0D + rnd.nextDouble() * 4.0D); // 反复 3-7° 瞬移式转枪
+            } else {
+                xs.add(Math.abs(rnd.nextGaussian() * 0.08D) + rnd.nextDouble() * 0.05D);
+            }
+        }
+        assertTrue(evaluate(xs).contains("zscore"),
+                "repeated large snaps should flag zscore");
     }
 }

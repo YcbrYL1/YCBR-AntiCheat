@@ -57,14 +57,18 @@ public final class Statistics {
         double std = standardDeviation(xs);
         if (std < 1e-12) return -3.0; // 完全恒定 → 极度机械
         double n = xs.size();
+        // 原始矩（不标准化，保证尺度不变）：超额峰度 = m4/m2² - 3
         double m4 = 0.0;
+        double m2 = 0.0;
         for (double x : xs) {
-            double d = (x - mean) / std;
-            m4 += d * d * d * d;
+            double d = x - mean;
+            double d2 = d * d;
+            m4 += d2 * d2;
+            m2 += d2;
         }
         m4 /= n;
-        double m2 = variance(xs) * (n - 1) / n; // 总体方差
-        return m4 / (m2 * m2) - 3.0; // 超额峰度
+        m2 /= n;
+        return m4 / (m2 * m2) - 3.0;
     }
 
     public static double iqr(List<Double> xs) {
