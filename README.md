@@ -1,6 +1,6 @@
 # YCBR AntiCheat
 
-为 Minecraft 1.8.8 Paper 服务端打造的现代化高精度反作弊插件（Java 8）。
+为 Minecraft 1.8.8 Paper 服务端打造的现代化高精度轻量级反作弊插件（Java 8）。
 
 物理引擎预测 + 事务时钟 + 战斗统计/ML + 跨检测融合，覆盖移动 / 协议 / 战斗三大类检测。
 
