@@ -58,7 +58,9 @@ public final class ReachCheck extends Check {
         }
 
         // 多帧视角枚举：任一帧射线命中实体插值碰撞盒 → 视为合法命中（防误杀擦边）
-        if (i("multi-frame.enabled", 1) == 1 && hitsFromAnyFrame(data, target, maxReach + leniency)) {
+        int window = i("multi-frame.window-ticks", 2);
+        if (i("multi-frame.enabled", 1) == 1 && hitsFromAnyFrame(data, target, maxReach + leniency, window,
+                manager.getMainHandler().currentServerTick(), sd("multi-frame.expand", 0.05D, 0.0D))) {
             drain(data, "overreach", 0.3D);
             return;
         }
@@ -70,8 +72,36 @@ public final class ReachCheck extends Check {
         }
     }
 
+    /** 监听线程同步预检：距离超限且所有帧射线均未命中 → 建议取消本次攻击。 */
+    public static boolean shouldCancelAttack(PlayerData data, EntitySnapshot target,
+            double maxReach, double leniency, int windowTicks, int nowTick, double expand) {
+        if (target == null) {
+            return false;
+        }
+        double dx = target.x - data.movement.lastX;
+        double dz = target.z - data.movement.lastZ;
+        double halfWidth = Math.max(0.1D, target.width / 2.0D);
+        double hDist = Math.max(0.0D, Math.sqrt(dx * dx + dz * dz) - halfWidth);
+        double eyeY = data.movement.lastY + 1.62D;
+        double top = target.y + target.height;
+        double vDist;
+        if (eyeY > top) {
+            vDist = eyeY - top;
+        } else if (eyeY < target.y) {
+            vDist = target.y - eyeY;
+        } else {
+            vDist = 0.0D;
+        }
+        double distance = Math.sqrt(hDist * hDist + vDist * vDist);
+        if (distance <= maxReach + leniency) {
+            return false;
+        }
+        return !hitsFromAnyFrame(data, target, maxReach + leniency, windowTicks, nowTick, expand);
+    }
+
     /** 从最近 N 帧视角发射射线，命中目标插值碰撞盒即返回 true。 */
-    private boolean hitsFromAnyFrame(PlayerData data, EntitySnapshot target, double maxReach) {
+    private static boolean hitsFromAnyFrame(PlayerData data, EntitySnapshot target, double maxReach,
+            int windowTicks, int nowTick, double expand) {
         double eyeX = data.movement.lastX;
         double eyeY = data.movement.lastY + 1.62D;
         double eyeZ = data.movement.lastZ;
@@ -84,7 +114,6 @@ public final class ReachCheck extends Check {
         double tz = target.z - target.vz * ageTicks;
 
         double halfWidth = Math.max(0.1D, target.width / 2.0D);
-        double expand = sd("multi-frame.expand", 0.05D, 0.0D);
         double minX = tx - halfWidth - expand;
         double minY = ty - expand;
         double minZ = tz - halfWidth - expand;
@@ -92,8 +121,6 @@ public final class ReachCheck extends Check {
         double maxY = ty + target.height + expand;
         double maxZ = tz + halfWidth + expand;
 
-        int windowTicks = i("multi-frame.window-ticks", 2);
-        int nowTick = manager.getMainHandler().currentServerTick();
         int frames = 0;
         for (int step = 0; step < PlayerData.ROT_HIST_SIZE && frames < windowTicks; step++) {
             int idx = (data.rotHistHead - step + PlayerData.ROT_HIST_SIZE) % PlayerData.ROT_HIST_SIZE;

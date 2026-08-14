@@ -76,6 +76,13 @@ public final class AsyncPacketListener {
                 } else if (event.getPacketType() == PacketType.Play.Client.LOOK) {
                     handleLook(data, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.USE_ENTITY) {
+                    // Phase 4：实时取消不可能攻击（监听线程同步预检，宁可漏不可杀）
+                    int targetId = packet.getIntegers().read(0);
+                    if (isAttack(packet) && manager.getRegistry().cancelImpossibleAttack(data, targetId)) {
+                        event.setCancelled(true);
+                        data.attackBlockedUntil = System.currentTimeMillis() + 500L;
+                        return;
+                    }
                     handleUseEntity(data, player, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.ARM_ANIMATION) {
                     data.actor.submit(() -> {
