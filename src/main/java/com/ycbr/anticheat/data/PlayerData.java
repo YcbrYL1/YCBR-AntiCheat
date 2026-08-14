@@ -163,6 +163,17 @@ public final class PlayerData {
     /** 每玩家事务往返追踪器（见 TransactionTracker）。由 {@link #transaction(AntiCheatManager)} 懒初始化。 */
     public volatile TransactionTracker transaction;
 
+    // ---- Aim 统计层（Phase 3.1）----
+    /** 攻击窗口内的 yaw/pitch 增量样本（最近 50 个）。 */
+    public final java.util.ArrayDeque<Double> aimDeltasStat = new java.util.ArrayDeque<Double>();
+    public final java.util.ArrayDeque<Double> aimPitchDeltasStat = new java.util.ArrayDeque<Double>();
+    public volatile double lastAimYaw;
+    public volatile double lastAimPitch;
+    /** 已收集的统计样本数（KillAura 冷启动门控用）。 */
+    public volatile int statSampleCount;
+    /** 最近一次 aim-stat 交叉信号产生时刻（新鲜度校验用）。 */
+    public volatile long aimStatSignalTime;
+
     /** 最近一次移动包到达时的服务器 tick 计数（TimerCheck 间隔测量用）。 */
     public volatile int lastMoveServerTick;
 

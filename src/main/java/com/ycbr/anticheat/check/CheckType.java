@@ -21,7 +21,8 @@ public enum CheckType {
     INSTANTBOW("InstantBow", "instantbow"),
     FASTCLICK("FastClick", "fastclick"),
     REACH("Reach", "reach"),
-    SIMULATION("Simulation", "simulation");
+    SIMULATION("Simulation", "simulation"),
+    AIMSTAT("AimStat", "aimstat");
 
     private final String display;
     private final String configPath;
