@@ -8,6 +8,11 @@ import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.util.MathUtil;
 
+/**
+ * @deprecated 经验公式检测（魔法数容差），已被 SimulationCheck（预测引擎）取代。
+ * 保留为短期冗余兜底，引擎稳定后移除。
+ */
+@Deprecated
 public final class NoFallCheck extends Check {
 
     public NoFallCheck(AntiCheatManager manager) {
