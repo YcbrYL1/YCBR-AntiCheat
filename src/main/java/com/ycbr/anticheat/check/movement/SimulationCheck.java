@@ -139,7 +139,9 @@ public final class SimulationCheck extends Check {
         // 台阶/楼梯自动步进豁免：引擎无步进模型，motY 只能到 0/0.42，
         // 而走上半砖/楼梯 motY 可达 ±0.5；仅在脚下确为台阶/楼梯地形时放行。
         boolean stepUp = WorldProbe.stepVerticalAllowed(actualDY, data.blockOnStairsOrSlab);
-        boolean vMatch = bestVDist <= vTol || stepUp;
+        // 粘液块弹跳豁免：1.8 粘液块落地反弹 |dy| 可达 ~0.63，引擎无弹跳模型。
+        boolean slimeBounce = WorldProbe.slimeBounceAllowed(actualDY, data.blockOnSlime);
+        boolean vMatch = bestVDist <= vTol || stepUp || slimeBounce;
         if (vMatch) {
             drain(data, "sim-fly", 0.05D);
         } else {
