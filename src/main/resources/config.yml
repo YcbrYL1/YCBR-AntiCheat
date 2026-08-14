@@ -318,6 +318,16 @@ checks:
       iqr-min: 0.001
       ks-min-uniform: 0.2
       zscore-threshold: 3.5
+  improbable:
+    enabled: false
+    kick-at-vl: 15
+    kick-message: "&cKicked for Improbable"
+    short-ticks: 20
+    short-threshold: 6
+    long-ticks: 200
+    long-threshold: 30
+    min-categories: 2
+    vl-before-flag: 3
   fly:
     enabled: true
     kick-at-vl: 20

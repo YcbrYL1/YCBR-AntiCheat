@@ -22,7 +22,8 @@ public enum CheckType {
     FASTCLICK("FastClick", "fastclick"),
     REACH("Reach", "reach"),
     SIMULATION("Simulation", "simulation"),
-    AIMSTAT("AimStat", "aimstat");
+    AIMSTAT("AimStat", "aimstat"),
+    IMPROBABLE("Improbable", "improbable");
 
     private final String display;
     private final String configPath;

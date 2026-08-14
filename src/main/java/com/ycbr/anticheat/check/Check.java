@@ -102,6 +102,10 @@ public abstract class Check {
             return true;
         }
         data.buffers.put(key, value);
+        // ImproBable 融合（Phase 10）：亚阈值小违规喂入每玩家类别桶（默认关，由调用方 gate）
+        if (cfg.raw().getBoolean("checks.improbable.enabled", false)) {
+            data.improbable.feed(type, manager.getMainHandler().currentServerTick());
+        }
         return false;
     }
 
