@@ -195,12 +195,12 @@ checks:
       consecutive-away: 8
       vl-before-flag: 6
     cadence:
-      enabled: true
+      enabled: false
       batch-size: 10
       tolerance-ms: 10
       vl-before-flag: 4
     colinear:
-      enabled: true
+      enabled: false
       vl-before-flag: 4
     grid45:
       enabled: false
