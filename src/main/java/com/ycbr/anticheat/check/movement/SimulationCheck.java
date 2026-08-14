@@ -10,6 +10,11 @@ import com.ycbr.anticheat.simulation.PredictionEngine;
 import com.ycbr.anticheat.simulation.ShadowPlayer;
 import com.ycbr.anticheat.simulation.WorldProbe;
 
+/**
+ * 预测引擎检测（初级版 Grim）。默认关闭，稳定后可切换。
+ * sim-speed：水平位移模长超过全部合法候选的上界 → 加速；
+ * sim-fly：垂直位移偏离全部合法候选 → 上升过快/悬浮。
+ */
 public final class SimulationCheck extends Check {
 
     private static final long TICK_MS = 50L;
@@ -29,7 +34,6 @@ public final class SimulationCheck extends Check {
             return;
         }
         MovementTracker m = data.movement;
-
         ShadowPlayer shadow = data.shadow;
         float yaw = (float) ctx.yaw;
         WorldProbe.ProbeResult probe = WorldProbe.fromPlayerData(data);
@@ -40,7 +44,9 @@ public final class SimulationCheck extends Check {
         double jumpLevel = data.jumpLevel;
 
         long elapsed = ctx.arrivalTime - shadow.lastSyncTime;
-        if (elapsed < 0) elapsed = TICK_MS;
+        if (elapsed < 0) {
+            elapsed = TICK_MS;
+        }
         int ticks = (int) Math.min(MAX_TICKS, Math.max(1, Math.ceil((double) elapsed / TICK_MS)));
 
         PredictionEngine.Candidate[] cands;
@@ -49,55 +55,52 @@ public final class SimulationCheck extends Check {
                     shadow.motionX, shadow.motionZ, shadow.motionY,
                     shadow.onGround, yaw, frictionFactor,
                     sprinting, speedLevel, jumpLevel, ticks,
-                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked);
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false);
         } else {
             cands = PredictionEngine.candidates(
-                    shadow.motionX, shadow.motionZ, shadow.onGround, yaw,
-                    frictionFactor, sprinting, speedLevel, jumpLevel,
-                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked);
+                    shadow.motionX, shadow.motionY, shadow.motionZ,
+                    shadow.onGround, yaw, frictionFactor,
+                    sprinting, speedLevel, jumpLevel,
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false);
         }
 
         double actualDX = ctx.x - shadow.posX;
         double actualDY = ctx.y - shadow.posY;
         double actualDZ = ctx.z - shadow.posZ;
+        double actualH = Math.hypot(actualDX, actualDZ);
 
         double hTol = sd("sim-speed.horizontal-tolerance", 0.01D, 0.005D);
         double vTol = sd("sim-fly.vertical-tolerance", 0.02D, 0.01D);
 
         // 液体/网/梯子预测精度下降：容差放大，防误判
         if (probe.inLiquid || probe.inWeb || probe.onLadder) {
-            hTol *= sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
-            vTol *= sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
+            double mult = sd("sim-speed.liquid-tolerance-multiplier", 2.0D, 2.0D);
+            hTol *= mult;
+            vTol *= mult;
         }
-
         if (ticks > 1) {
             hTol *= Math.sqrt(ticks);
             vTol *= Math.sqrt(ticks);
         }
 
-        boolean hMatch = false;
-        double bestHDist = Double.MAX_VALUE;
+        // 水平：模长匹配（方向无关，抗斜向/侧移误判）。idle 候选覆盖静止。
+        double maxH = 0.0;
         for (PredictionEngine.Candidate c : cands) {
-            double dx = actualDX - c.deltaX;
-            double dz = actualDZ - c.deltaZ;
-            double dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < bestHDist) {
-                bestHDist = dist;
-            }
-            if (dist <= hTol) {
-                hMatch = true;
-                break;
+            double ch = Math.hypot(c.deltaX, c.deltaZ);
+            if (ch > maxH) {
+                maxH = ch;
             }
         }
-
+        boolean hMatch = actualH <= maxH + hTol;
         if (hMatch) {
             drain(data, "sim-speed", 0.05D);
         } else {
-            double over = bestHDist - hTol;
+            double over = actualH - maxH - hTol;
             if (over > 0.005D) {
                 if (bump(data, "sim-speed", 1D, i("sim-speed.vl-before-flag", 8))) {
                     flag(data, "sim-speed",
-                            "hDist=" + String.format("%.4f", bestHDist)
+                            "h=" + String.format("%.4f", actualH)
+                            + " max=" + String.format("%.4f", maxH)
                             + " tol=" + String.format("%.3f", hTol)
                             + " ticks=" + ticks);
                 }
@@ -106,6 +109,7 @@ public final class SimulationCheck extends Check {
             }
         }
 
+        // 垂直：取与最近合法垂直增量的偏差
         double bestVDist = Double.MAX_VALUE;
         for (PredictionEngine.Candidate c : cands) {
             double vDist = Math.abs(actualDY - c.motionY);
@@ -114,7 +118,6 @@ public final class SimulationCheck extends Check {
             }
         }
         boolean vMatch = bestVDist <= vTol;
-
         if (vMatch) {
             drain(data, "sim-fly", 0.05D);
         } else {
@@ -131,24 +134,37 @@ public final class SimulationCheck extends Check {
             }
         }
 
-        resyncShadow(shadow, ctx, yaw, probe, sprinting, sneaking,
-                speedLevel, jumpLevel);
+        resyncShadow(shadow, ctx, yaw, probe, sprinting, sneaking, speedLevel, jumpLevel);
     }
 
+    /**
+     * 重同步 shadow：位置/水平增量直接取客户端实际值；
+     * 垂直状态按 NMS 推导（空中: (ΔY-0.08)*0.98；地面: 0），下包即可继续预测。
+     * onGround 只信服务器判定。
+     */
     private void resyncShadow(ShadowPlayer shadow, MoveContext ctx, float yaw,
             WorldProbe.ProbeResult probe, boolean sprinting, boolean sneaking,
             double speedLevel, double jumpLevel) {
-        boolean serverGround = probe.surface != WorldProbe.Surface.AIR
-                && Math.abs(ctx.y - shadow.posY) < 0.001D;
+        double actualDY = ctx.y - shadow.posY;
+        boolean serverGround = Math.abs(actualDY) < 0.001D && !probe.inWeb && !probe.onLadder;
+        double nextMotY;
+        if (serverGround && !probe.inLiquid) {
+            nextMotY = 0.0;
+        } else if (probe.onLadder) {
+            nextMotY = PredictionEngine.LADDER_CLIMB;
+        } else {
+            nextMotY = (actualDY - PredictionEngine.GRAVITY) * PredictionEngine.VERTICAL_DRAG;
+        }
         shadow.sync(ctx.x, ctx.y, ctx.z,
-                ctx.x - shadow.posX, ctx.y - shadow.posY, ctx.z - shadow.posZ,
+                actualDX(ctx, shadow), nextMotY, actualDZ(ctx, shadow),
                 ctx.data.movement.onGround, serverGround, yaw, ctx.arrivalTime);
     }
 
-    private double getFrictionFactor(PlayerData data) {
-        MovementTracker m = data.movement;
-        if (m.iceTicks > 0) return 0.98D;
-        if (m.slimeTicks > 0) return 0.8D;
-        return 0.6D;
+    private static double actualDX(MoveContext ctx, ShadowPlayer shadow) {
+        return ctx.x - shadow.posX;
+    }
+
+    private static double actualDZ(MoveContext ctx, ShadowPlayer shadow) {
+        return ctx.z - shadow.posZ;
     }
 }

@@ -48,6 +48,8 @@ public final class WorldProbe {
             r.surface = Surface.ICE;
         } else if (data.blockOnSlime) {
             r.surface = Surface.SLIME;
+        } else if (data.blockOnSoulSand) {
+            r.surface = Surface.SOUL_SAND;
         } else if (data.blockBelowUnstandable) {
             r.surface = Surface.AIR;
         }
