@@ -310,11 +310,14 @@ checks:
     enabled: true
     kick-at-vl: 30
     kick-message: "&cKicked for Timer"
-    max-eps: 22
-    max-eps-short: 24
     min-tps: 15
-    burst-ms: 500
-    max-burst-eps: 22
+    window-size: 60
+    min-avg: 0.95
+    short-window-size: 25
+    short-min-avg: 0.97
+    burst-window-size: 10
+    burst-min-avg: 0.85
+    burst-window-ms: 500
     burst-vl-before-flag: 3
     vl-before-flag: 5
   nofall:
