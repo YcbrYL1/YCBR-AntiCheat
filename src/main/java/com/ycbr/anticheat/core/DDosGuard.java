@@ -136,7 +136,9 @@ public final class DDosGuard {
                     String name = null;
                     try {
                         name = event.getPacket().getGameProfiles().read(0).getName();
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        plugin.getLogger().fine("YCBR: failed to read login name: " + e.getMessage());
+                    }
                     if (name != null) {
                         onLoginStart(name);
                     }
@@ -209,7 +211,8 @@ public final class DDosGuard {
                 if (elapsed > timeout) {
                     try {
                         channel.getClass().getMethod("close").invoke(channel);
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
+                        plugin.getLogger().fine("YCBR: failed to close idle connection: " + e.getMessage());
                     }
                     connTrack.remove(networkManager);
                     closedConnections++;
@@ -311,7 +314,8 @@ public final class DDosGuard {
                         && method.getReturnType().getName().endsWith("ServerConnection")) {
                     try {
                         return method.invoke(mcServer);
-                    } catch (Exception ignored) {
+                    } catch (Exception e2) {
+                        Bukkit.getLogger().fine("YCBR: ServerConnection reflect failed: " + e2.getMessage());
                     }
                 }
             }
@@ -336,7 +340,8 @@ public final class DDosGuard {
                     return field.get(networkManager);
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Bukkit.getLogger().fine("YCBR: channel reflect failed: " + e.getMessage());
         }
         return null;
     }
@@ -359,7 +364,8 @@ public final class DDosGuard {
                         }
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e2) {
+                Bukkit.getLogger().fine("YCBR: packet listener state reflect failed: " + e2.getMessage());
             }
         }
         return "";
@@ -391,7 +397,8 @@ public final class DDosGuard {
             if (remote instanceof InetSocketAddress) {
                 return ((InetSocketAddress) remote).getAddress().getHostAddress();
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Bukkit.getLogger().fine("YCBR: remote address reflect failed: " + e.getMessage());
         }
         return "?";
     }

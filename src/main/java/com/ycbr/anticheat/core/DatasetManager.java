@@ -8,6 +8,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.bukkit.Bukkit;
 import java.util.Map;
 
 import com.ycbr.anticheat.util.MathUtil;
@@ -70,7 +71,8 @@ public final class DatasetManager {
             w.write(dataLine);
             w.newLine();
             w.close();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Bukkit.getLogger().warning("YCBR: failed to write dataset record: " + e.getMessage());
         }
     }
 

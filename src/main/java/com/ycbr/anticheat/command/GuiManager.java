@@ -915,6 +915,11 @@ public final class GuiManager implements Listener {
             return;
         }
         Player viewer = (Player) event.getWhoClicked();
+        // 会话内二次权限复核（权限被撤销/名单被改后立即失效）
+        if (!viewer.hasPermission("ycbr.admin") && !manager.isYcbrOp(viewer.getName())) {
+            close(viewer);
+            return;
+        }
         GuiState state = states.get(viewer.getUniqueId());
         if (state == null) {
             return;
@@ -1301,6 +1306,11 @@ public final class GuiManager implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
+        // 会话内二次权限复核（编辑配置属于敏感操作）
+        if (!player.hasPermission("ycbr.admin") && !manager.isYcbrOp(player.getName())) {
+            close(player);
+            return;
+        }
         GuiState state = states.get(player.getUniqueId());
         if (state == null || state.editKey == null) {
             return;

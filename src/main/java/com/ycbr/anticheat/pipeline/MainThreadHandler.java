@@ -306,7 +306,7 @@ public final class MainThreadHandler implements Runnable {
         int kickAt = cfg.i("checks." + verdict.type.getConfigPath() + ".kick-at-vl", 20);
         if (vl >= kickAt) {
             data.resetViolations(verdict.type);
-            if (player.isOp()) {
+            if (data.op) {
                 return;
             }
             long expiry = manager.getBanManager().claim(player.getUniqueId(), player.getName());
