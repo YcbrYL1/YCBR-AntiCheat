@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.ycbr.anticheat.check.CheckType;
+import com.ycbr.anticheat.core.AntiCheatManager;
+import com.ycbr.anticheat.core.TransactionTracker;
 import com.ycbr.anticheat.pipeline.PlayerActor;
 import com.ycbr.anticheat.simulation.ShadowPlayer;
 
@@ -116,6 +118,7 @@ public final class PlayerData {
 
     public volatile boolean blockOnIce;
     public volatile boolean blockOnSlime;
+    public volatile boolean blockOnSoulSand;
     public volatile boolean blockNearLiquid;
     public volatile boolean blockBoxedIn;
     public volatile boolean blockInWeb;
@@ -157,6 +160,21 @@ public final class PlayerData {
     public volatile long lastBowFlagTime;
     public volatile long lastFastClickFlagTime;
 
+    /** 每玩家事务往返追踪器（见 TransactionTracker）。由 {@link #transaction(AntiCheatManager)} 懒初始化。 */
+    public volatile TransactionTracker transaction;
+
+    // ---- 惩罚框架（Phase 0.4）----
+    /** 攻击阻断截止时间（ms），此前 onAttack 不派发到检测。 */
+    public volatile long attackBlockedUntil;
+    /** 交叉信号集合（多检测协同投票，如 killaura+reach+aim 同时命中）。 */
+    public final java.util.Set<String> crossSignals =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+    /** 最近一次 setback 时间与目标位置。 */
+    public volatile long lastSetbackTime;
+    public volatile double setbackX;
+    public volatile double setbackY;
+    public volatile double setbackZ;
+
     public PlayerData(UUID uuid) {
         this.uuid = uuid;
         this.lastActive = System.currentTimeMillis();
@@ -164,6 +182,21 @@ public final class PlayerData {
 
     public UUID getUuid() {
         return uuid;
+    }
+
+    /**
+     * 懒初始化并返回本玩家的事务追踪器。下游检测（Timer/Blink/Velocity）应统一通过此
+     * 方法获取，确保 tracker 一定已创建（且只创建一次）。
+     */
+    public TransactionTracker transaction(AntiCheatManager manager) {
+        if (transaction == null) {
+            synchronized (this) {
+                if (transaction == null) {
+                    transaction = new TransactionTracker(manager, uuid);
+                }
+            }
+        }
+        return transaction;
     }
 
     public void addViolation(CheckType type) {

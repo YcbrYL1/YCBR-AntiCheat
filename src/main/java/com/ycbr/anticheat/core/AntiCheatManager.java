@@ -123,6 +123,22 @@ public final class AntiCheatManager {
         mainHandler.queue(verdict);
     }
 
+    /**
+     * 将玩家 setback 到指定位置（主线程传送）。调用方需传入合法位置，
+     * 若位置无效（如全 0 且从未记录）则忽略，避免误传送。
+     */
+    public void queueSetback(java.util.UUID uuid, double x, double y, double z) {
+        if (x == 0.0D && y == 0.0D && z == 0.0D) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                p.teleport(new org.bukkit.Location(p.getWorld(), x, y, z));
+            }
+        });
+    }
+
     public YCBR getPlugin() {
         return plugin;
     }

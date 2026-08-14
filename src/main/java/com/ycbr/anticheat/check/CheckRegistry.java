@@ -96,6 +96,9 @@ public final class CheckRegistry {
         if (ctx.data.op) {
             return;
         }
+        if (System.currentTimeMillis() < ctx.data.attackBlockedUntil) {
+            return; // 攻击阻断（软惩罚）：不派发战斗检测
+        }
         for (Check check : checks) {
             check.onAttack(ctx);
         }

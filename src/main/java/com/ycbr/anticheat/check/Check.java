@@ -122,4 +122,38 @@ public abstract class Check {
     protected final int i(String sub, int def) {
         return cfg.i("checks." + type.getConfigPath() + "." + sub, def);
     }
+
+    // ---- 惩罚框架（Phase 0.4）----
+
+    /** 阻断该玩家攻击 ms 毫秒（常用于高 VL 命中后的软惩罚）。 */
+    protected final void blockAttacks(PlayerData data, long ms) {
+        data.attackBlockedUntil = Math.max(data.attackBlockedUntil,
+                System.currentTimeMillis() + ms);
+    }
+
+    protected final boolean attacksBlocked(PlayerData data) {
+        return System.currentTimeMillis() < data.attackBlockedUntil;
+    }
+
+    /** 添加交叉信号（跨检测协同）。 */
+    protected final void addSignal(PlayerData data, String signal) {
+        data.crossSignals.add(signal);
+    }
+
+    /** 统计命中了几个交叉信号。 */
+    protected final int signalCount(PlayerData data, String... names) {
+        int n = 0;
+        for (String name : names) {
+            if (data.crossSignals.contains(name)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** 将玩家 setback 到最近一次记录的有效位置（主线程传送）。 */
+    protected final void setback(PlayerData data) {
+        manager.queueSetback(data.getUuid(), data.setbackX, data.setbackY, data.setbackZ);
+        data.lastSetbackTime = System.currentTimeMillis();
+    }
 }
