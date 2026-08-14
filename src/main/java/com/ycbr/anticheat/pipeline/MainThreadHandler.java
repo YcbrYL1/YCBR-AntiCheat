@@ -33,7 +33,7 @@ public final class MainThreadHandler implements Runnable {
 
     private int taskId = -1;
     private int sweepTaskId = -1;
-    private int tickCounter;
+    private volatile int tickCounter;
     private int decayTickCounter;
     private long lastTickNanos;
     private volatile double tps = 20.0D;
@@ -58,6 +58,11 @@ public final class MainThreadHandler implements Runnable {
 
     public double getTps() {
         return tps;
+    }
+
+    /** 当前服务器 tick 计数（主线程维护，volatile 供异步检测读取）。 */
+    public int currentServerTick() {
+        return tickCounter;
     }
 
     public boolean isFused() {

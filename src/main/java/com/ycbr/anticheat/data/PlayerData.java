@@ -163,6 +163,14 @@ public final class PlayerData {
     /** 每玩家事务往返追踪器（见 TransactionTracker）。由 {@link #transaction(AntiCheatManager)} 懒初始化。 */
     public volatile TransactionTracker transaction;
 
+    /** 最近一次移动包到达时的服务器 tick 计数（TimerCheck 间隔测量用）。 */
+    public volatile int lastMoveServerTick;
+
+    /** 击退包发送时刻的服务器 tick 计数（VelocityCheck 事务到达窗口用）。 */
+    public volatile int kbIssuedServerTick;
+    /** 击退包预计到达客户端的服务器 tick（发送 tick + ceil(RTT/50)）。 */
+    public volatile int kbArrivalServerTick;
+
     // ---- 惩罚框架（Phase 0.4）----
     /** 攻击阻断截止时间（ms），此前 onAttack 不派发到检测。 */
     public volatile long attackBlockedUntil;
