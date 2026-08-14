@@ -42,8 +42,19 @@ public final class VelocityCheck extends Check {
             vs.markAirborne();
         }
 
+        // 击退事务三明治：以事务 RTT 精确推算击退到达客户端的服务器 tick，
+        // 取代纯 pingTicks 估算——高 ping 玩家击退包还在路上时不做判定。
         int pingTicks = Math.min(8, Math.max(0, (int) Math.ceil(data.ping / 50.0D)));
-        int t = vs.ticksSince() - pingTicks;
+        int t;
+        if (data.kbArrivalServerTick > 0) {
+            int currentTick = manager.getMainHandler().currentServerTick();
+            if (currentTick < data.kbArrivalServerTick + si("arrival-window-ticks", 2, 1)) {
+                return; // 击退尚未到达客户端（含 ±1 tick 容差），不判定
+            }
+            t = currentTick - data.kbArrivalServerTick; // 到达后经过的 tick
+        } else {
+            t = vs.ticksSince() - pingTicks;
+        }
         if (t < 1) {
             return;
         }
@@ -213,7 +224,8 @@ public final class VelocityCheck extends Check {
             }
         }
 
-        if (vs.ticksSince() > 12 + pingTicks) {
+        int expireAfter = Math.max(12 + pingTicks, 14);
+        if (vs.ticksSince() > expireAfter) {
             vs.expire();
         }
     }
@@ -221,6 +233,15 @@ public final class VelocityCheck extends Check {
     public void onKbIssued(PlayerData data) {
         data.kbJumpedThisKb = false;
         data.kbSprintResetCounted = false;
+        // 记录击退发送的服务器 tick + 预计到达时刻（事务 RTT 精确推算）
+        data.kbIssuedServerTick = manager.getMainHandler().currentServerTick();
+        if (data.transaction != null && data.transaction.rttMs() > 0D) {
+            data.kbArrivalServerTick = data.kbIssuedServerTick
+                    + Math.max(1, (int) Math.ceil(data.transaction.rttMs() / 50.0D));
+        } else {
+            data.kbArrivalServerTick = data.kbIssuedServerTick
+                    + Math.max(1, (int) Math.ceil(data.ping / 50.0D));
+        }
     }
 
     public void checkSprintReset(PlayerData data, long now) {
