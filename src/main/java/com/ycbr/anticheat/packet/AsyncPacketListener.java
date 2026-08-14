@@ -16,6 +16,7 @@ import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.check.movement.VelocityCheck;
 import com.ycbr.anticheat.core.AntiCheatManager;
+import com.ycbr.anticheat.core.TransactionTracker;
 import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.AttackContext;
 import com.ycbr.anticheat.data.context.MoveContext;
@@ -48,7 +49,7 @@ public final class AsyncPacketListener {
                 PacketType.Play.Client.BLOCK_DIG, PacketType.Play.Client.CLIENT_COMMAND,
                 PacketType.Play.Client.ARM_ANIMATION, PacketType.Play.Client.ENTITY_ACTION,
                 PacketType.Play.Client.STEER_VEHICLE, PacketType.Play.Client.KEEP_ALIVE,
-                PacketType.Play.Client.HELD_ITEM_SLOT) {
+                PacketType.Play.Client.HELD_ITEM_SLOT, PacketType.Play.Client.TRANSACTION) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
                 if (event.isCancelled()) {
@@ -60,6 +61,7 @@ public final class AsyncPacketListener {
                 }
                 PlayerData data = manager.getDataManager().get(player.getUniqueId());
                 data.lastActive = System.currentTimeMillis();
+                data.transaction(manager); // 确保每个活跃玩家都有事务追踪器
                 if (!data.authenticated && manager.getAuthManager().enabled()
                         && isAuthBlocked(event.getPacketType())) {
                     event.setCancelled(true);
@@ -93,6 +95,8 @@ public final class AsyncPacketListener {
                     handleBlockDig(data, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.CLIENT_COMMAND) {
                     handleClientCommand(data, packet);
+                } else if (event.getPacketType() == PacketType.Play.Client.TRANSACTION) {
+                    handleTransaction(data, packet);
                 }
             }
         };
@@ -555,6 +559,19 @@ public final class AsyncPacketListener {
             return -1;
         } catch (Exception e) {
             return -1;
+        }
+    }
+
+    private void handleTransaction(PlayerData data, PacketContainer packet) {
+        short action;
+        try {
+            action = packet.getShorts().read(0);
+        } catch (Exception e) {
+            return;
+        }
+        TransactionTracker tx = data.transaction;
+        if (tx != null) {
+            tx.onReceive(action);
         }
     }
 
