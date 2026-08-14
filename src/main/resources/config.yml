@@ -404,6 +404,7 @@ reach:
     kick-message: "&cKicked for Reach"
     max-reach: 3.1
     leniency: 0.03
+    cancel-impossible: true
     multi-frame:
         enabled: true
         window-ticks: 2

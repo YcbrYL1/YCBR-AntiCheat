@@ -31,6 +31,7 @@ import com.ycbr.anticheat.data.context.AttackContext;
 import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.data.context.PlaceContext;
 import com.ycbr.anticheat.pipeline.MainThreadHandler;
+import com.ycbr.anticheat.snapshot.EntitySnapshot;
 
 public final class CheckRegistry {
 
@@ -87,6 +88,28 @@ public final class CheckRegistry {
 
     public Check get(CheckType type) {
         return byType.get(type);
+    }
+
+    /** 监听线程同步预检：Reach 判定超距且射线未命中 → 建议取消本次攻击。 */
+    public boolean cancelImpossibleAttack(PlayerData data, int targetId) {
+        if (data.op || data.creative) {
+            return false;
+        }
+        ReachCheck reach = (ReachCheck) byType.get(CheckType.REACH);
+        if (reach == null || !reach.isEnabled()) {
+            return false;
+        }
+        EntitySnapshot target = manager.getEntitySnapshots().get(targetId);
+        if (target == null) {
+            return false;
+        }
+        double maxReach = manager.config().raw().getDouble("checks.reach.max-reach", 3.1D);
+        double leniency = manager.config().raw().getDouble("checks.reach.leniency", 0.03D);
+        int window = manager.config().raw().getInt("checks.reach.multi-frame.window-ticks", 2);
+        double expand = manager.config().raw().getDouble("checks.reach.multi-frame.expand", 0.05D);
+        boolean cancelEnabled = manager.config().raw().getBoolean("checks.reach.cancel-impossible", true);
+        return cancelEnabled && ReachCheck.shouldCancelAttack(data, target, maxReach, leniency, window,
+                manager.getMainHandler().currentServerTick(), expand);
     }
 
     public void onMove(MoveContext ctx) {
