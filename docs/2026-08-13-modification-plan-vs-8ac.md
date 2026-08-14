@@ -426,5 +426,5 @@ public final class PhysicsConstants {
 | P2.1 SimulationCheck 方向匹配 + strafe 候选扩展 | ✅ Phase 5 | `PredictionEngine.candidates` 扩展至 24 候选（4 speeds × 2 jumps × 3 strafe）；方向匹配夹角 ≤30°（ticks≥3 放宽 45°），config `sim-speed.direction-match` 默认关（`7bd0c57`） |
 | P3.3 Reach 动态收缩 reachMod | ✅ Phase 5 | `ReachModLogic`：边缘连击 8 次收缩 0.05、上限 0.5、正常攻击 ×0.8 衰减，config `reach.reach-mod` 默认关（`f1e388f`） |
 | P3.4 Scaffold 批处理统计 | ✅ 已覆盖 | `cadence` 子项已存在（Phase 1，默认关），批量统计思想已实现 |
-| 7.1 PhysicsConstants 物理常量集中化 | ⬜ 剩余 | 纯重构、收益低、改动面大，暂缓 |
-| 7.2 KnownExemptions 豁免系统 | 🟡 雏形 | `stepVerticalAllowed`（Phase 4）/`slimeBounceAllowed`（Phase 5）已分散实现，集中化为注册表形式未做 |
+| 7.1 PhysicsConstants 物理常量集中化 | ✅ Phase 9（`15fdc76`） | `simulation/PhysicsConstants`：引擎 20 常量 + 摩擦表/墙距/药水/水中贴地常量集中；PredictionEngine/WorldProbe/VelocityLedger/VelocityState/MainThreadHandler/CriticalsCheck/FlyCheck/ShadowPlayer 全部消重引用，129/129 回归 |
+| 7.2 KnownExemptions 豁免系统 | ✅ Phase 9（`c27c6f7`） | `simulation/KnownExemptions` 注册表（5 条：MEDIUM/PISTON/MULTI_TICK/STEP_VERTICAL/SLIME_BOUNCE，各带 mc 版本 + 描述）+ 门面判定；WorldProbe 委托、SimulationCheck 接线，`KnownExemptionsTest` 9 用例，138/138 |

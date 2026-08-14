@@ -62,3 +62,20 @@
 - 常量：全仓无未集中物理魔法数残留（grep 抽查 0.42/0.98/0.08/0.91 仅出现在常量类/测试）。
 - 豁免：引擎系豁免全部经 KnownExemptions，注册表每项带版本注释。
 - 回归：全量测试通过，生产零行为变化（重构不改任何值）。
+
+---
+
+## 6. 实施结果（2026-08-14）
+
+| 任务 | 结果 | 提交 |
+|------|------|------|
+| t1 常量 | ✅ `simulation/PhysicsConstants`（simulation 包，蓝图原定 core 包以实际引擎域为准）：20 个引擎常量迁移（PredictionEngine 委托引用，API 兼容）；新增 `JUMP_POTION_PER_LEVEL`/`LIQUID_GROUND_SPRINT_FACTOR`/`SLIPPERINESS_*`/`WALL_PROBE_STEP` 收拢内联魔法数；消重 8 处（WorldProbe.Surface、VelocityLedger、VelocityState、MainThreadHandler 墙距步长、PredictionEngine/ShadowPlayer 跳跃药水 3+1 处、CriticalsCheck、FlyCheck）。`SpeedCheck`（@Deprecated 经验类）与 `MovementTracker` tick 常量按计划不动。129/129 | `15fdc76` |
+| t2 豁免 | ✅ `simulation/KnownExemptions`：注册表 `EXEMPTIONS` 5 条（MEDIUM/PISTON/MULTI_TICK/STEP_VERTICAL/SLIME_BOUNCE，各带 mc 版本 + 描述）+ 门面判定（`isMediumExempt`/`isPistonExempt`/`multiTickSqrtFactor`/`stepVerticalAllowed`/`slimeBounceAllowed`）；判定逻辑原样迁移零行为变化，幅度仍由调用方 config 决定。接线：WorldProbe 两方法委托、SimulationCheck 三处容差豁免改调。`KnownExemptionsTest` 9 用例（阈值两侧 + 介质 + 注册表完整性）。138/138 | `c27c6f7` |
+| t3 收尾 | 本回填 + 蓝图 §7.1/7.2 勾选 ✅ + 全量回归 + jar 打包 | 本提交 |
+
+### 实测偏差记录
+
+- **蓝图落点变更**：蓝图 §7.1 指定 `core/PhysicsConstants.java`，实际引擎域在 `simulation` 包（PredictionEngine/WorldProbe/VelocityLedger 均在此），落地 `simulation/PhysicsConstants`——内聚性优先，蓝图为早期规划。
+- **`0.003`/`3.92` 确认全仓不存在**：非移动项，未引入。
+- **`SLIPPERINESS_ICE`(0.98) 与 `VERTICAL_DRAG`(0.98) 数值相同语义不同**：独立命名不合并（冰面摩擦 vs 垂直拖拽）。
+- **编码教训复现**：edit 工具写入 SimulationCheck 中文注释损坏（乱码）→ 已改 ASCII 注释；Java 源码注释保持 ASCII 原则继续有效。
