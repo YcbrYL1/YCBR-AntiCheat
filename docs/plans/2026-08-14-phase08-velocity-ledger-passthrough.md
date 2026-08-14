@@ -136,3 +136,28 @@ DDA 步进"取最宽松"：射线**真正穿过**方块（内部弦长足够长�
 - 账本：`VelocityLedgerTest` 7 用例通过；生产默认关零行为变化。
 - 射线：`RayMarchUtilTest` 7 用例通过；throughwalls 正射行为等价。
 - 全量回归 ≥ 现有 113 用例不破坏；提交 3 个（t1/t2/t3）。
+
+---
+
+## 6. 实施结果（2026-08-14）
+
+| 任务 | 结果 | 提交 |
+|------|------|------|
+| t1 账本 | ✅ 完成。`VelocityLedgerTest` **9 用例**全绿（含窗口内不计数、`isAllConsumed` 断言）；`simulation/VelocityLedger.java` 实现（`HORIZONTAL_DECAY=0.91`、`DIRECTION_DOT=0.6`、`MIN_CONSUME_RATIO=0.35`）。接线：`PlayerData.velocityLedger`/`kbLedgerStreak`、`VelocityCheck.onKbIssued` 入队、`onMove` 新 `ledger` 子检测（**默认关**，仅 `!wall && !ceiling` 计数，streak=2、window=12、vl-before-flag=3，prune 30 tick）；config `velocity.ledger.enabled: false` | `36c1de6` |
+| t2 射线 | ✅ 完成。`RayMarchUtilTest` **7 用例**全绿（开放/厚墙 blockedAt=1.0/擦角短弦长/斜向空隙/非遮挡材质/起点格跳过/超距不判）；`simulation/RayMarchUtil.java` DDA voxel traversal（tMax 最小轴优先、不跳格、弦长 > 0.25 实挡、起始格不判）。接线：`KillAuraCheck.checkThroughWalls` 手写 0.35 步长采样循环（L751-793）替换为三段 `march(checker,...)`，`OcclusionChecker` 生产实现 = `NmsUtil.isOccluding || isSolid`；`step`/`max-rays` 配置移除，新增 `throughwalls.min-solid-chord`（0.25）；三段射线/burst/`minBlockedDistance` 保持不变 | `45e7c99` |
+| t3 收尾 | 本回填 + 全量回归 **129/129 通过** + jar 打包 | 进行中 |
+
+### 实测偏差记录
+
+- **设计修正 1（测试）**：`unconsumed_afterWindow_counts` 原设计"窗口内计数"错误——
+  窗口语义是 `tick - arrivalTick > windowTicks` 才计，窗口内不计数（`isAllConsumed` 仍 false）。
+- **设计修正 2（测试）**：`diagonalHole` 原墙位 (2,0,2) 恰在 45° 射线上（弦长 1.414 实挡），
+  墙改至 (2,2,2)（y 层外）验证"穿过空隙不挡"。
+- **lambda 约束**：Java 8 lambda 引用的 `world` 非 effectively final → 引入 `final World fWorld` 副本。
+- **擦角几何**：弦长 < 0.25 需射线几乎沿格面（如 x 微斜 + 起点贴近边界），
+  验证用例 `grazingCorner_shortChord_passed`（弦长 ~0.0025 放行）后补 `thickWall`（1.0 实挡）对照。
+
+### 待部署
+
+- 账本/射线均在默认参数下零行为变化（账本 `enabled: false`；射线参数与旧采样等效），
+  无部署风险；账本可在服务器观察期后按 SOP 开启。

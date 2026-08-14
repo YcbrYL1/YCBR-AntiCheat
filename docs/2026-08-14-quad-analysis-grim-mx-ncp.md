@@ -208,10 +208,13 @@
 
 8. **Velocity 速度账本**（学 NCP `SimpleAxisVelocity`/`FrictionAxisVelocity`）
    - 把服务端发出的速度向量入队、按符号匹配消耗、带容差与摩擦衰减，识别"被发出但玩家从未消费的速度"（击退绕过）。与 YCBR 现有 `kbArrivalServerTick` 事务到达判定互补，提升精度。
+   - ✅ **已实现（Phase 8，`36c1de6`）**：`simulation/VelocityLedger`（水平账本，`HORIZONTAL_DECAY=0.91`/`DIRECTION_DOT=0.6`/`MIN_CONSUME_RATIO=0.35`），`VelocityCheck` 新 `ledger` 子检测默认关；`VelocityLedgerTest` 9 用例。
 9. **跨检测多源融合**（学 NCP `Improbable`）
    - 各检测小违规喂入统一频率桶，短窗/全窗超阈值才升级 VL。YCBR 已有交叉信号框架，可升级为 NCP 式" improbable 融合"。
+   - ✅ **已具备基础**（Phase 6）：`MainThreadHandler` 频率桶保险丝（§P0-1 侧写），未全量融合。
 10. **Passable 几何射线穿墙**（学 NCP `Passable.java`）
     - YCBR 已有 `through-walls` 体素射线采样。借鉴 NCP 的多轴序（YXZ/YZX/XZY/ZXY）取最宽松 + 起步已在方块内不判 + 实时方块变化跟踪，提升稳定性。
+    - ✅ **已实现（Phase 8，`45e7c99`）**：`simulation/RayMarchUtil` DDA 体素步进（tMax 最小轴优先、不跳格、弦长 > 0.25 实挡、擦角放行、起始格不判），`KillAuraCheck.checkThroughWalls` 采样循环替换；`RayMarchUtilTest` 7 用例。
 
 ### 不学什么（避免退化）
 
