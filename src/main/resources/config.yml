@@ -10,6 +10,7 @@ settings:
   violation-decay-seconds: 60
   vl-reset-window-ms: 60000
   debug-velocity: false
+  debug-packets: false
   auth-enabled: true
   auth-session-hours: 24
   auth-premium-players: []

@@ -41,6 +41,14 @@ public final class YCBRCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        // 代码级权限守卫（兜底，不依赖 plugin.yml 单点防护）
+        boolean isAlertsOnly = args[0].equalsIgnoreCase("alerts");
+        if (!sender.hasPermission("ycbr.admin") && !manager.isYcbrOp(sender.getName())
+                && !(isAlertsOnly && sender.hasPermission("ycbr.alerts"))) {
+            sender.sendMessage(cfg.prefix() + "&cNo permission.");
+            return true;
+        }
+
         switch (args[0].toLowerCase()) {
             case "help":
             case "?":

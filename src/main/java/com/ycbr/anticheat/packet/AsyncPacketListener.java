@@ -114,7 +114,8 @@ public final class AsyncPacketListener {
                         data.lastTeleportZ = event.getPacket().getDoubles().read(2);
                         data.lastTeleportTime = System.currentTimeMillis();
                         data.shadow.reset(data.lastTeleportX, data.lastTeleportY, data.lastTeleportZ);
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
+                        logReadFailure("teleport pos", e);
                     }
                     return;
                 }
@@ -151,6 +152,13 @@ public final class AsyncPacketListener {
         }
     }
 
+    /** debug-packets 开关下的读取失败日志（默认静默，排查时可开）。 */
+    private void logReadFailure(String what, Exception e) {
+        if (manager.config().raw().getBoolean("settings.debug-packets", false)) {
+            Bukkit.getLogger().warning("[YCBR] packet read failed: " + what + " -> " + e.getMessage());
+        }
+    }
+
     private void handlePosition(PlayerData data, PacketContainer packet, boolean withRotation) {
         double x = packet.getDoubles().read(0);
         double y = packet.getDoubles().read(1);
@@ -174,7 +182,8 @@ public final class AsyncPacketListener {
         boolean onGround = false;
         try {
             onGround = packet.getBooleans().read(0);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("position onGround", e);
         }
         final boolean fOnGround = onGround;
         final long fArrival = System.currentTimeMillis();
@@ -237,7 +246,8 @@ public final class AsyncPacketListener {
         boolean onGround = false;
         try {
             onGround = packet.getBooleans().read(0);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("look onGround", e);
         }
         final float fYaw = yaw;
         final float fPitch = pitch;
@@ -364,7 +374,8 @@ public final class AsyncPacketListener {
                     direction = 5;
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("block place direction", e);
         }
         boolean hasCursor = false;
         double cursorX = 0D;
@@ -375,7 +386,8 @@ public final class AsyncPacketListener {
             cursorY = packet.getFloat().read(1);
             cursorZ = packet.getFloat().read(2);
             hasCursor = true;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("block place cursor", e);
         }
         final int fDirection = direction;
         final boolean fHasCursor = hasCursor;
@@ -391,7 +403,8 @@ public final class AsyncPacketListener {
                 if (p != null && p.getItemInHand() != null) {
                     held = p.getItemInHand().getType();
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                logReadFailure("held item", e);
             }
             data.blockingSword = held == Material.WOOD_SWORD || held == Material.STONE_SWORD
                     || held == Material.IRON_SWORD || held == Material.GOLD_SWORD
@@ -443,7 +456,8 @@ public final class AsyncPacketListener {
                 int face = readFace(packet.getModifier().read(1));
                 return new int[] { status, face };
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("block dig status enum", e);
         }
         try {
             Object faceRaw = packet.getModifier().read(3);
@@ -451,7 +465,8 @@ public final class AsyncPacketListener {
             if (faceRaw instanceof Number && statusRaw instanceof Number) {
                 return new int[] { ((Number) statusRaw).intValue(), ((Number) faceRaw).intValue() };
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logReadFailure("block dig status numeric", e);
         }
         return null;
     }

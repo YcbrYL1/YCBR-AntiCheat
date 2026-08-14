@@ -54,7 +54,8 @@ public final class BanManager {
                         String name = section.getString(key + ".name", "unknown");
                         long expiry = section.getLong(key + ".expiry", 0L);
                         bans.put(uuid, new BanRecord(name, expiry));
-                    } catch (IllegalArgumentException ignore) {
+                    } catch (IllegalArgumentException e) {
+                        Bukkit.getLogger().warning("YCBR: skipping invalid ban record: " + key + " -> " + e.getMessage());
                     }
                 }
             }

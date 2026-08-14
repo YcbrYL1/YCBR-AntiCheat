@@ -82,7 +82,8 @@ public final class BukkitListener implements Listener {
         data.shadow.reset(player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ());
         data.shadow.lastSyncTime = System.currentTimeMillis();
         com.ycbr.anticheat.core.AuthManager auth = manager.getAuthManager();
-        boolean ok = !auth.enabled() || auth.isPremium(player.getName()) || manager.isYcbrOp(player.getName());
+        boolean ok = !auth.enabled() || auth.isPremium(player.getName()) || manager.isYcbrOp(player.getName())
+                || player.isOp();
         if (!ok) {
             String ip = player.getAddress() == null ? ""
                     : player.getAddress().getAddress().getHostAddress();
