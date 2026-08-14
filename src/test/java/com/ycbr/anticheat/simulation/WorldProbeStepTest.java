@@ -63,4 +63,23 @@ class WorldProbeStepTest {
         assertFalse(WorldProbe.stepVerticalAllowed(0.5, false));
         assertFalse(WorldProbe.stepVerticalAllowed(0.2, false));
     }
+
+    @Test
+    void slimeBounceAllowed_onSlime_smallDelta() {
+        assertTrue(WorldProbe.slimeBounceAllowed(0.6, true));
+        assertTrue(WorldProbe.slimeBounceAllowed(-0.6, true));
+        assertTrue(WorldProbe.slimeBounceAllowed(0.63, true));
+    }
+
+    @Test
+    void slimeBounceAllowed_exceedingBounceEnvelope_rejected() {
+        assertFalse(WorldProbe.slimeBounceAllowed(1.2, true));
+        assertFalse(WorldProbe.slimeBounceAllowed(-1.0, true));
+    }
+
+    @Test
+    void slimeBounceAllowed_flatTerrain_rejected() {
+        assertFalse(WorldProbe.slimeBounceAllowed(0.6, false));
+        assertFalse(WorldProbe.slimeBounceAllowed(0.3, false));
+    }
 }
