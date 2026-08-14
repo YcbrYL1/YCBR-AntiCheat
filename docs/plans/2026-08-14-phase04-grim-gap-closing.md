@@ -476,3 +476,34 @@ git commit -m "docs: false-positive sample feedback workflow (P1)
 - Velocity 的 `JumpReset`/`SprintReset` 行为指纹（相对 Grim 的差异化优势）。
 - KillAura 启发式 × 统计交叉验证门控（`signal-fresh-ms: 10000`）。
 - Timer/Blink 事务化逻辑、Reach 多帧射线-AABB 主判定。
+
+---
+
+## ✅ 实施结果（2026-08-14）
+
+全部 6 个任务完成。最终 **65/65 测试通过**，`mvn package` 成功（YCBR.jar 246251 bytes），已部署至服务器。
+
+| 任务 | 提交 | 内容 |
+|------|------|------|
+| 1. Sprint 状态合规 + 翻转双条件 | `2c96f41` | `SprintLogic`（6 类禁止疾跑状态位 + `isIllegalFlip` 双条件）+ SprintLogicTest 9 测试；`SprintCheck.checkAction` 双条件判定；`max-flip-gap-ms` 20→40 |
+| 2. Reach 实时取消不可能攻击 | `d481903` | `ReachCheck.shouldCancelAttack` 只读同步预检（复用多帧射线-AABB）；`CheckRegistry.cancelImpossibleAttack`；AsyncPacketListener USE_ENTITY 监听线程 `event.setCancelled(true)` + `attackBlockedUntil` 联动；ReachCancelTest 2 测试 |
+| 3. Scaffold 行为子项默认关闭 | `6a61630` | `cadence`/`colinear` enabled false（grid45/duprot 已 false，协议类子项保持开启） |
+| 4. simulation 调参 SOP 文档 | `ce6108e` | `docs/2026-08-14-simulation-tuning-sop.md`（三周步进开启 + 回退条件 + 观察命令） |
+| 5. 误判样本回灌工作流文档 | `6dca39c` | `docs/ml/README.md` 追加"误判样本回灌"章节 |
+| 6. 回归验证 + 收尾 | 本批 | 65/65 测试全绿；jar 打包；git 状态干净 |
+
+**计划外补丁（同批）：**
+- `03108d1`：修复 fastclick/reach 配置死键——config 键实际在 `checks.*` 下，原顶层键是死配置（审计发现）。
+- `10f4aa2`：审计修复（权限复核、op 豁免、空 catch 日志化）——本计划前置依赖，已并入。
+
+**对计划的偏离（设计决策）：**
+- Reach 实时取消：实测 `onPacketReceiving` 同步段取消有效（HIGH 优先级监听），无需退化为"仅 attackBlockedUntil"方案；`getEntityUseActions().read(0)` 与既有 `isAttack` 复用 action 值。
+- Sprint `STATE_HEAD_BLOCKED`：以 `data.blockBoxedIn`（MainThreadHandler 探测）为准，未引入新的前方一格探测。
+- 误判风暴修复（**Phase 4 之后**，2026-08-14 部署后实机误判触发）：4 个提交 `ff4e296`(Timer TPS 归一化)、`af154b1`(NoSlow 仅真使用物品置 usingItem)、`e9aa4f1`(sim-fly 台阶/楼梯步进豁免)、`9ca4be6`(sim-speed 疾跑候选独立于 sprinting 标志)——测试增至 **85/85**，jar 249289 bytes。详见 `docs/plans/` 下待建 Phase 5 计划。
+
+## 验证方式（实际结果）
+
+- 单测：65 全绿（54 既有 + 9 SprintLogic + 2 ReachCancel）→ 误判修复后 85 全绿。
+- 编译：`mvn test -q` 无输出、退出码 0。
+- 配置：config.yml 增量 diff 仅含计划内键。
+- 实机：按 SOP 步进开启 simulation，配合 `debug-packets` 观察误判；首轮开启即发现 sim-fly/sim-speed/Timer/NoSlow 误判风暴，已由上述 4 个补丁修复（TPS 19.2、台阶步进 0.5、放方块卡 usingItem、疾跑标志滞后四项根因）。
