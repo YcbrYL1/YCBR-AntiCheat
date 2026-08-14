@@ -20,8 +20,8 @@ import java.util.List;
  */
 public final class VelocityLedger {
 
-    /** 水平摩擦衰减基（与 NMS motX *= 0.91 一致）。 */
-    public static final double HORIZONTAL_DECAY = 0.91D;
+    /** 水平摩擦衰减基（与 NMS motX *= 0.91 一致，集中定义于 PhysicsConstants）。 */
+    public static final double HORIZONTAL_DECAY = PhysicsConstants.AIR_FRICTION;
     /** 方向匹配最低 dot（位移与击退方向夹角的余弦下界）。 */
     public static final double DIRECTION_DOT = 0.6D;
     /** 消费所需最低位移比例（相对衰减后期望）。 */

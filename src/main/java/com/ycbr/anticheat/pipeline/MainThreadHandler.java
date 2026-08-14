@@ -18,6 +18,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import com.ycbr.anticheat.simulation.PhysicsConstants;
 import com.ycbr.anticheat.simulation.WorldProbe;
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.core.AntiCheatManager;
@@ -271,7 +272,8 @@ public final class MainThreadHandler implements Runnable {
         double rad = Math.toRadians(yaw + offsetDeg);
         double dx = Math.cos(rad);
         double dz = Math.sin(rad);
-        for (double d = 0.05; d <= 0.65; d += 0.05) {
+        for (double d = PhysicsConstants.WALL_PROBE_STEP; d <= PhysicsConstants.WALL_TRUNCATION_LIMIT;
+                d += PhysicsConstants.WALL_PROBE_STEP) {
             Block b = player.getWorld().getBlockAt(
                     (int) Math.floor(px + dx * d), (int) Math.floor(py), (int) Math.floor(pz + dz * d));
             if (b.getType().isSolid()) {

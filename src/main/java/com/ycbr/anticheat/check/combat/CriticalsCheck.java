@@ -6,6 +6,7 @@ import com.ycbr.anticheat.core.AntiCheatManager;
 import com.ycbr.anticheat.data.MovementTracker;
 import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.context.AttackContext;
+import com.ycbr.anticheat.simulation.PhysicsConstants;
 import com.ycbr.anticheat.util.MathUtil;
 
 public final class CriticalsCheck extends Check {
@@ -46,10 +47,12 @@ public final class CriticalsCheck extends Check {
             return;
         }
         double kb = data.velocity.vertical();
-        double expectedMax = Math.max(0D, 0.42D * Math.pow(0.98D, m.airTicks))
-                + sd("air.jump-tolerance", 0.05D, 0.02D) + kb + data.jumpLevel * 0.1D;
+        double expectedMax = Math.max(0D,
+                PhysicsConstants.JUMP_VELOCITY * Math.pow(PhysicsConstants.VERTICAL_DRAG, m.airTicks))
+                + sd("air.jump-tolerance", 0.05D, 0.02D) + kb
+                + data.jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
         boolean susp = (m.airTicks <= 6 && m.motionY > expectedMax)
-                || (m.airTicks > 6 && m.motionY > 0.08D + kb);
+                || (m.airTicks > 6 && m.motionY > PhysicsConstants.GRAVITY + kb);
         if (susp) {
             if (bump(data, "air", 1D, i("air.vl-before-flag", 5))) {
                 flag(data, "Air", "jump-curve violation airTicks=" + m.airTicks

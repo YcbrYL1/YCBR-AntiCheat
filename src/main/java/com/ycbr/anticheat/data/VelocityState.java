@@ -1,5 +1,7 @@
 package com.ycbr.anticheat.data;
 
+import com.ycbr.anticheat.simulation.PhysicsConstants;
+
 public final class VelocityState {
 
     private double vx;
@@ -82,11 +84,13 @@ public final class VelocityState {
     }
 
     public double horizontal() {
-        return pending ? Math.sqrt(vx * vx + vz * vz) * Math.pow(0.91D, Math.min(20, ticksSince)) : 0D;
+        return pending ? Math.sqrt(vx * vx + vz * vz)
+                * Math.pow(PhysicsConstants.AIR_FRICTION, Math.min(20, ticksSince)) : 0D;
     }
 
     public double expectedHorizontal() {
-        return Math.sqrt(vx * vx + vz * vz) * Math.pow(0.91D, Math.min(20, ticksSince));
+        return Math.sqrt(vx * vx + vz * vz)
+                * Math.pow(PhysicsConstants.AIR_FRICTION, Math.min(20, ticksSince));
     }
 
     public double vertical() {
@@ -98,8 +102,10 @@ public final class VelocityState {
             return 0D;
         }
         double tt = Math.max(1D, t);
-        double decayed = vy * Math.pow(0.98D, tt - 1D);
-        double gravity = 0.08D * (1D - Math.pow(0.98D, tt - 1D)) / 0.02D;
+        double decayed = vy * Math.pow(PhysicsConstants.VERTICAL_DRAG, tt - 1D);
+        double gravity = PhysicsConstants.GRAVITY
+                * (1D - Math.pow(PhysicsConstants.VERTICAL_DRAG, tt - 1D))
+                / PhysicsConstants.LIQUID_GRAVITY;
         return Math.max(0D, decayed - gravity);
     }
 }
