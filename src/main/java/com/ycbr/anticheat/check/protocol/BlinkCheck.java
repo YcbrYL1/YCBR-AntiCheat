@@ -28,16 +28,35 @@ public final class BlinkCheck extends Check {
         if (manager.getMainHandler().getTps() < d("min-tps", 15D)) {
             return;
         }
+        if (data.lastPositionMillis <= 0L) {
+            return;
+        }
+
         long silence = now - data.lastPositionMillis;
-        long maxSilence = si("max-silence-ms", 2000, 1500) + data.ping;
-        if (data.lastPositionMillis > 0L && silence > maxSilence) {
-            if (now - data.lastBlinkFlagTime < si("cooldown-ms", 5000, 3000)) {
-                return;
-            }
-            data.lastBlinkFlagTime = now;
-            if (bump(data, "blink", 1D, i("vl-before-flag", 2))) {
-                flag(data, "Blink", "no position packet for " + silence + "ms");
-            }
+        boolean livePong = data.transaction != null
+                && data.transaction.lastPongTime() > data.lastPositionMillis
+                && now - data.transaction.lastPongTime() < si("pong-live-ms", 1500, 1000);
+
+        long maxSilence;
+        if (livePong) {
+            // 核心判定：客户端持续回复事务 pong（网络活着）却超过阈值不发移动包
+            // = 囤包重放（Blink），与 ping 完全解耦——高 ping 玩家照样有连续 pong。
+            maxSilence = si("max-silence-ms", 2000, 1000);
+        } else {
+            // 兜底：事务未初始化或 pong 也已停止（客户端整体断流），
+            // 沿用超时 + ping 补偿的老逻辑。
+            maxSilence = si("max-silence-ms", 3000, 2000) + data.ping;
+        }
+        if (silence <= maxSilence) {
+            return;
+        }
+        if (now - data.lastBlinkFlagTime < si("cooldown-ms", 5000, 3000)) {
+            return;
+        }
+        data.lastBlinkFlagTime = now;
+        if (bump(data, "blink", 1D, i("vl-before-flag", 2))) {
+            flag(data, "Blink", (livePong ? "silent=" : "no packet for ") + silence + "ms"
+                    + (livePong ? " with live pong" : ""));
         }
     }
 }
