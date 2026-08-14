@@ -12,6 +12,7 @@ import com.ycbr.anticheat.data.PlayerData;
 import com.ycbr.anticheat.data.MovementTracker;
 import com.ycbr.anticheat.data.context.AttackContext;
 import com.ycbr.anticheat.data.context.MoveContext;
+import com.ycbr.anticheat.simulation.RayMarchUtil;
 import com.ycbr.anticheat.snapshot.EntitySnapshot;
 import com.ycbr.anticheat.util.MathUtil;
 import com.ycbr.anticheat.util.NmsUtil;
@@ -730,9 +731,8 @@ public final class KillAuraCheck extends Check {
         if (hDist > maxLen) {
             return;
         }
-        double step = d("throughwalls.sample-step", 0.35D);
-        double maxTicks = d("throughwalls.max-rays", 32D);
         double minBlockedDistance = sd("throughwalls.min-blocked-distance", 1.0D, 0.7D);
+        double minSolidChord = d("throughwalls.min-solid-chord", 0.25D);
         org.bukkit.World world = null;
         org.bukkit.entity.Player player = org.bukkit.Bukkit.getPlayer(data.getUuid());
         if (player != null && player.isOnline() && player.getWorld() != null) {
@@ -748,6 +748,18 @@ public final class KillAuraCheck extends Check {
         double tRy = ty - target.vy;
         double tRz = tz - target.vz;
         double blockedAt = 0D;
+        final org.bukkit.World fWorld = world;
+        RayMarchUtil.OcclusionChecker checker = (bx, by, bz) -> {
+            try {
+                boolean oc = NmsUtil.isOccluding(fWorld, bx, by, bz);
+                if (!oc) {
+                    oc = fWorld.getBlockAt(bx, by, bz).getType().isSolid();
+                }
+                return oc;
+            } catch (Exception e) {
+                return false;
+            }
+        };
         for (double[] seg : new double[][] {
                 { ex, data.movement.lastY + EYE_STANDING, ez, tx, ty, tz },
                 { ex, data.movement.lastY + EYE_SNEAKING, ez, tx, ty, tz },
@@ -755,40 +767,20 @@ public final class KillAuraCheck extends Check {
             double sx = seg[0];
             double sy = seg[1];
             double sz = seg[2];
-            double dx = seg[3] - sx;
-            double dy = seg[4] - sy;
-            double dz = seg[5] - sz;
-            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (len < 1e-6) {
+            double ddx = seg[3] - sx;
+            double ddy = seg[4] - sy;
+            double ddz = seg[5] - sz;
+            double segLen = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (segLen < 1e-6) {
                 return;
             }
-            double hits = Math.min(Math.ceil(len / step), maxTicks);
-            boolean rayBlocked = false;
-            double firstBlocked = 0D;
-            for (double k = 1D; k <= hits; k++) {
-                double t = k * step;
-                int bx = (int) Math.floor(sx + dx / len * t);
-                int by = (int) Math.floor(sy + dy / len * t);
-                int bz = (int) Math.floor(sz + dz / len * t);
-                try {
-                    boolean oc = NmsUtil.isOccluding(world, bx, by, bz);
-                    if (!oc) {
-                        oc = world.getBlockAt(bx, by, bz).getType().isSolid();
-                    }
-                    if (oc) {
-                        rayBlocked = true;
-                        firstBlocked = t;
-                        break;
-                    }
-                } catch (Exception e) {
-                    return;
-                }
-            }
-            if (!rayBlocked) {
+            RayMarchUtil.Result r = RayMarchUtil.march(checker, sx, sy, sz,
+                    ddx, ddy, ddz, segLen, minSolidChord);
+            if (!r.blocked) {
                 return;
             }
-            if (blockedAt == 0D || firstBlocked < blockedAt) {
-                blockedAt = firstBlocked;
+            if (blockedAt == 0D || r.blockedAt < blockedAt) {
+                blockedAt = r.blockedAt;
             }
         }
         if (blockedAt < minBlockedDistance) {
