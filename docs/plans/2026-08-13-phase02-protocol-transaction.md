@@ -4,6 +4,23 @@
 
 **目标：** 借鉴 Grim 的 transaction/packet-order 思路，把 Timer、Blink、Velocity 三个协议类检测从"wall-clock 估算"升级为"事务往返精确判定"，消除高 ping/网络抖动导致的误判，同时保留 YCBR-AC 的 Velocity 细分指纹（JumpReset/SprintReset）差异化优势。
 
+---
+
+## ✅ Phase 2 实施结果（2026-08-14）
+
+全部 4 个任务完成，35 → 40 个测试全通过（新增 TimerLogicTest 5 个），`mvn -q -DskipTests package` BUILD SUCCESS（YCBR.jar 225712 bytes）。
+
+| 任务 | 提交 | 内容 |
+|------|------|------|
+| 1. Timer 事务化 | `90eb30f` | 新建 `TimerLogic`（纯逻辑，100 包环形缓冲）；`TimerCheck` 弃 wall-clock EPS，改用"服务器 tick 计数差值"间隔（`MainThreadHandler.currentServerTick()` 新增 volatile 计数）；三窗口（60/25/10 包）全改为 tick 间隔均值，高 ping 抖动（0/1/2/3 交替）测试不误判 |
+| 2. Blink 活体 pong | `262982e` | 核心判定"有事务 pong 但无移动包"（`lastPongTime > lastPositionMillis` 且 pong 新鲜 <1500ms → 囤包确认，与 ping 解耦）；原超时+ping 补偿逻辑保留为兜底；config 新增 `pong-live-ms` |
+| 3. Velocity 到达窗口 | `262982e` | `onKbIssued` 记录 `kbIssuedServerTick` + 按事务 RTT 推算 `kbArrivalServerTick`；判定从"到达 + arrival-window-ticks(2)"才开始，t 以到达时刻为基准；事务不可用时回退 pingTicks；JumpReset/SprintReset 细分原样保留 |
+| 4. 回归+文档 | 本提交 | 40 测试全过 + package 成功 |
+
+**config 变更摘要：** timer 段 `max-eps/max-eps-short/burst-ms/max-burst-eps` → `window-size/min-avg/short-window-size/short-min-avg/burst-window-size/burst-min-avg/burst-window-ms`；blink 段新增 `pong-live-ms: 1500`（max-silence-ms 3000→2000）；velocity 段新增 `arrival-window-ticks: 2`。
+
+**部署注意：** 换 jar 后必须删除服务器旧 config.yml 使新配置生效。
+
 **架构方案：** 依赖 Phase 0 的 `TransactionTracker`（每玩家 RTT 追踪）。Timer 改用"玩家事务往返速率 vs 移动包速率"对比；Blink 改用"移动包序号连续性"校验（囤包重放暴露为序号异常），沉默时长降级为辅助；Velocity 用 transaction 三明治确认击退到达客户端的精确时刻，区分"网络延迟"与"真没被推"。
 
 **技术栈：** Java 8、JUnit 5、Paper 1.8.8 v1_8_R3、ProtocolLib（事务包）
