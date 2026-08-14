@@ -13,7 +13,7 @@
 |------|------|------|
 | 空包（无类的包目录） | **无** | — |
 | 空函数（纯空方法体） | 8 个钩子方法（正常模板）+ 5 个工具类私有构造器（正常） | 无 |
-| 死代码（写了未接线） | **FastClickLogic 1 个** | 中 |
+| 死代码（写了未接线） | **无** | — |
 | 空 catch（静默吞异常） | **15 处**（AsyncPacketListener 8 / DDosGuard 6 / BanManager 1） | 中 |
 | 授权缺失 | **5 处**（详见 §3） | 中高 |
 
@@ -38,13 +38,12 @@
 | `util/NmsUtil.java` | 私有构造器 | 同上 |
 | `util/Statistics.java` | 私有构造器 | 同上 |
 
-### 2.2 死代码（真问题）—— FastClickLogic 未接线
+### 2.2 死代码核查 —— FastClickLogic 已接线（非死代码）
 
 - **文件**：`check/combat/FastClickLogic.java`（约 60 行，完整实现了 cps/burst/CV/峰度/熵 五维机械点击统计）
-- **现状**：全项目 grep `FastClickLogic` 仅命中自身定义，`FastClickCheck.java` 未引用它——FastClickCheck 仍用老的 `attackTimes` 200ms 窗口 burst 逻辑。
-- **对比**：同批新增的 `TimerLogic`（TimerCheck 已用）和 `AimStatsLogic`（AimStatisticsCheck 已用）都已接线，唯独 FastClickLogic 漏了。
-- **影响**：多写了一个可单测的统计判定类却没启用，功能白白浪费；`MIN_SAMPLES=40`、机械模式判定等能力闲置。
-- **修复**：把 FastClickCheck 的 burst 判定换成 `FastClickLogic.feed(interval)` + `mechanicalPattern()`，或删除该类。
+- **现状（复核修正）**：`FastClickCheck.java:13` 持有 `private final FastClickLogic logic = new FastClickLogic();`，并在 `onAttack` 中调用 `logic.feed(interval)`（L51）与 `logic.mechanicalPattern(...)`（L52）——**已正确接线，不是死代码**。
+- **说明**：此前初版体检报告因 grep 输出截断，误判其为死代码，此处更正。同类新增的 `TimerLogic`（TimerCheck 已用）、`AimStatsLogic`（AimStatisticsCheck 已用）也均已接线。
+- **结论**：源码树内**未发现真正未接线的死代码类**。
 
 ## 3. 空 catch 检查（静默吞异常）
 
@@ -100,7 +99,7 @@
 - `CheckRegistry` 20 处 `data.op` 豁免检查齐全（onMove/onAttack/onPlace/onClientCommand/onRotation/onLook/onBlockDigStart/onThrow/onBowRelease/onHeldItemSlot 全有）。
 - `BanManager` 封禁有 `target.isOp()` 保护（L49）。
 - `plugin.yml` 声明了 `ycbr.admin`（default: op）、`ycbr.alerts`（default: op），`ycbr`/`timeban`/`untimeban` 命令都挂了权限节点。
-- 新增统计检测（AimStatisticsCheck/AimStatsLogic/TimerLogic）均已正确接线，非死代码。
+- 新增统计检测（AimStatisticsCheck/AimStatsLogic/TimerLogic/FastClickLogic）均已正确接线，非死代码。
 
 ## 6. 修复优先级建议
 
