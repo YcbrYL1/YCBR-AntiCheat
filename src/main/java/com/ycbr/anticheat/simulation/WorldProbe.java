@@ -33,6 +33,12 @@ public final class WorldProbe {
         public boolean headBlocked;
         public boolean belowUnstandable;
         public boolean onPiston;
+        /** 前方墙距（yaw 方向），无墙 = POSITIVE_INFINITY。 */
+        public double wallFwd = Double.POSITIVE_INFINITY;
+        /** 左侧墙距（yaw-90°），无墙 = POSITIVE_INFINITY。 */
+        public double wallLeft = Double.POSITIVE_INFINITY;
+        /** 右侧墙距（yaw+90°），无墙 = POSITIVE_INFINITY。 */
+        public double wallRight = Double.POSITIVE_INFINITY;
 
         public boolean anySpecial() {
             return inLiquid || inWeb || onLadder || headBlocked || belowUnstandable || onPiston
@@ -62,6 +68,10 @@ public final class WorldProbe {
         r.headBlocked = data.blockBoxedIn;
         r.belowUnstandable = data.blockBelowUnstandable;
         r.onPiston = data.blockOnPiston;
+        // 墙距：0/未探测视为无墙（保持无墙默认行为）
+        r.wallFwd = data.wallFwdDist > 0.0 ? data.wallFwdDist : Double.POSITIVE_INFINITY;
+        r.wallLeft = data.wallLeftDist > 0.0 ? data.wallLeftDist : Double.POSITIVE_INFINITY;
+        r.wallRight = data.wallRightDist > 0.0 ? data.wallRightDist : Double.POSITIVE_INFINITY;
         return r;
     }
 

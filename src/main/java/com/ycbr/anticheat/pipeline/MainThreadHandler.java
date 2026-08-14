@@ -255,6 +255,30 @@ public final class MainThreadHandler implements Runnable {
         data.blockOnPiston = feetMat == Material.PISTON_MOVING_PIECE || belowMat == Material.PISTON_MOVING_PIECE;
         Block top = feet.getRelative(BlockFace.UP, 2);
         data.blockBoxedIn = belowMat.isSolid() && top.getType().isSolid() && !data.blockOnSlime;
+        float yaw = player.getLocation().getYaw();
+        data.wallFwdDist = wallDistance(player, px, py, pz, yaw, 0.0);
+        data.wallLeftDist = wallDistance(player, px, py, pz, yaw, -90.0);
+        data.wallRightDist = wallDistance(player, px, py, pz, yaw, 90.0);
+    }
+
+    /**
+     * Probe wall distance (meters) along a direction: step 0.05 from feet position,
+     * first solid block returns face distance (sample - 0.05). Direction convention
+     * matches PredictionEngine (yaw=0 faces +X). INFINITY if none. Main thread only.
+     */
+    private double wallDistance(Player player, double px, double py, double pz,
+            float yaw, double offsetDeg) {
+        double rad = Math.toRadians(yaw + offsetDeg);
+        double dx = Math.cos(rad);
+        double dz = Math.sin(rad);
+        for (double d = 0.05; d <= 0.65; d += 0.05) {
+            Block b = player.getWorld().getBlockAt(
+                    (int) Math.floor(px + dx * d), (int) Math.floor(py), (int) Math.floor(pz + dz * d));
+            if (b.getType().isSolid()) {
+                return d - 0.05;
+            }
+        }
+        return Double.POSITIVE_INFINITY;
     }
 
     private boolean unstandable(Material material) {

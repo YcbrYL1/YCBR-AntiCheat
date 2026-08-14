@@ -55,13 +55,15 @@ public final class SimulationCheck extends Check {
                     shadow.motionX, shadow.motionZ, shadow.motionY,
                     shadow.onGround, yaw, frictionFactor,
                     sprinting, speedLevel, jumpLevel, ticks,
-                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false);
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                    probe.wallFwd, probe.wallLeft, probe.wallRight);
         } else {
             cands = PredictionEngine.candidates(
                     shadow.motionX, shadow.motionY, shadow.motionZ,
                     shadow.onGround, yaw, frictionFactor,
                     sprinting, speedLevel, jumpLevel,
-                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false);
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                    probe.wallFwd, probe.wallLeft, probe.wallRight);
         }
 
         double actualDX = ctx.x - shadow.posX;

@@ -145,6 +145,13 @@ public final class PlayerData {
     /** 脚下/脚所在方块是活塞臂实体（PISTON_MOVING_PIECE）：位移由活塞外部驱动。 */
     public volatile boolean blockOnPiston;
 
+    /** 前方墙距（yaw 方向，米；0 = 未探测/无墙）。 */
+    public volatile double wallFwdDist;
+    /** 左侧墙距（yaw-90°，米；0 = 未探测/无墙）。 */
+    public volatile double wallLeftDist;
+    /** 右侧墙距（yaw+90°，米；0 = 未探测/无墙）。 */
+    public volatile double wallRightDist;
+
     public volatile boolean clientOnGround;
     public volatile boolean prevClientOnGround;
 
