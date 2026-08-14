@@ -422,12 +422,19 @@ checks:
     max-flip-gap-ms: 40
     flips-to-flag: 3
     vl-before-flag: 2
-  blink:
-    enabled: true
-    kick-at-vl: 20
-    kick-message: "&cKicked for Blink"
-    min-tps: 15
-    max-silence-ms: 2000
-    pong-live-ms: 1500
-    cooldown-ms: 5000
-    vl-before-flag: 2
+blink:
+      enabled: true
+      kick-at-vl: 20
+      kick-message: "&cKicked for Blink"
+      min-tps: 15
+      max-silence-ms: 2000
+      pong-live-ms: 1500
+      cooldown-ms: 5000
+      vl-before-flag: 2
+      replay-burst:
+        enabled: false
+        window: 40
+        min-silence-ms: 1000
+        min-burst-packets: 8
+        max-interval-ms: 25
+        vl-before-flag: 6

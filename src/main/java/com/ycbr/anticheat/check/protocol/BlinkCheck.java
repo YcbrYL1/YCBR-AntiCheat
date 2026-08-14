@@ -7,6 +7,12 @@ import com.ycbr.anticheat.data.PlayerData;
 
 public final class BlinkCheck extends Check {
 
+    private final BlinkLogic replayLogic = new BlinkLogic(i("replay-burst.window", 40),
+            si("replay-burst.min-silence-ms", 1000, 1000),
+            i("replay-burst.min-burst-packets", 8),
+            si("replay-burst.max-interval-ms", 25, 25));
+    private long logicLastSeen;
+
     public BlinkCheck(AntiCheatManager manager) {
         super(CheckType.BLINK, manager);
     }
@@ -46,6 +52,22 @@ public final class BlinkCheck extends Check {
             // 兜底：事务未初始化或 pong 也已停止（客户端整体断流），
             // 沿用超时 + ping 补偿的老逻辑。
             maxSilence = si("max-silence-ms", 3000, 2000) + data.ping;
+        }
+        if (isSubEnabled("replay-burst")) {
+            if (data.lastPositionMillis != logicLastSeen) {
+                // 有位置包到达：喂到达间隔（-1 = 首包，跳过 burst 判定）
+                if (data.lastMoveIntervalMs > 0L
+                        && replayLogic.feed(data.lastMoveIntervalMs, livePong)) {
+                    data.lastBlinkFlagTime = now;
+                    if (bump(data, "blink-replay", 1D, i("replay-burst.vl-before-flag", 6))) {
+                        flag(data, "BlinkReplay", "silence+burst replay, interval="
+                                + data.lastMoveIntervalMs + "ms");
+                    }
+                }
+                logicLastSeen = data.lastPositionMillis;
+            } else {
+                replayLogic.tick(50L, livePong);
+            }
         }
         if (silence <= maxSilence) {
             return;
