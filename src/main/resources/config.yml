@@ -281,6 +281,9 @@ checks:
       horizontal-tolerance: 0.01
       liquid-tolerance-multiplier: 2.0
       vl-before-flag: 8
+      direction-match:
+        enabled: false
+        max-angle-deg: 30
       strict:
         horizontal-tolerance: 0.005
     sim-fly:
