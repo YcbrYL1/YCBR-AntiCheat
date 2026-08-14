@@ -32,11 +32,14 @@ public final class TimerCheck extends Check {
             return;
         }
 
-        // 间隔测量：与 ping 解耦——包到达抖动不改变"相邻包覆盖的服务器 tick 数"均值
+        // 间隔测量：与 ping 解耦——包到达抖动不改变"相邻包覆盖的服务器 tick 数"均值。
+        // 按实际 TPS 归一化：TPS<20 时（如 19.2 → tick 52ms）正常 50ms 发包每包仅覆盖
+        // 0.96 tick，不经归一化会系统性误判为加速。
         int serverTick = manager.getMainHandler().currentServerTick();
-        int interval = 1;
+        double interval = 1.0D;
         if (data.lastMoveServerTick > 0) {
-            interval = Math.max(0, serverTick - data.lastMoveServerTick);
+            int delta = Math.max(0, serverTick - data.lastMoveServerTick);
+            interval = TimerLogic.normalizedInterval(delta, manager.getMainHandler().getTps());
         }
         data.lastMoveServerTick = serverTick;
 
