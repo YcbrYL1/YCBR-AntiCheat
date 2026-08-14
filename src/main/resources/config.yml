@@ -275,6 +275,11 @@ checks:
       minimum-percentage: 45.0
       expected-min: 0.25
       vl-before-flag: 4
+    ledger:
+      enabled: false
+      window-ticks: 12
+      streak: 2
+      vl-before-flag: 3
   simulation:
     enabled: false
     sim-speed:

@@ -228,6 +228,30 @@ public final class VelocityCheck extends Check {
         if (vs.ticksSince() > expireAfter) {
             vs.expire();
         }
+
+        // 账本（P2-8，默认关）：识别"发出但从未消费"的击退（绕过指纹）。
+        // 消费用移动增量（与 reversed 判定同源）；计数仅在无墙/无天花板时进行
+        // （墙截断位移会误判）。到达前不计数，由 VelocityLedger 内部处理。
+        if (isSubEnabled("ledger")) {
+            int nowTick = manager.getMainHandler().currentServerTick();
+            data.velocityLedger.consume(m.lastX - m.lastLastX, m.lastZ - m.lastLastZ, nowTick);
+            if (!wall && !ceiling) {
+                int window = si("ledger.window-ticks", 12, 12);
+                int un = data.velocityLedger.unconsumedCount(nowTick, window);
+                if (un > 0) {
+                    if (++data.kbLedgerStreak >= si("ledger.streak", 2, 2)) {
+                        data.kbLedgerStreak = 0;
+                        if (bump(data, "ledger", 1D, i("ledger.vl-before-flag", 3))) {
+                            flag(data, "LedgerUnconsumed", "unconsumed=" + un + " t=" + nowTick);
+                        }
+                    }
+                } else {
+                    data.kbLedgerStreak = 0;
+                    drain(data, "ledger", 0.05D);
+                }
+            }
+            data.velocityLedger.prune(nowTick, 30);
+        }
     }
 
     public void onKbIssued(PlayerData data) {
@@ -242,6 +266,8 @@ public final class VelocityCheck extends Check {
             data.kbArrivalServerTick = data.kbIssuedServerTick
                     + Math.max(1, (int) Math.ceil(data.ping / 50.0D));
         }
+        // 账本入队（到达 tick 复用事务推算值；账本只做水平）
+        data.velocityLedger.enqueue(data.velocity.x(), data.velocity.z(), data.kbArrivalServerTick);
     }
 
     public void checkSprintReset(PlayerData data, long now) {

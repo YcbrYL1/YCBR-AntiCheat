@@ -21,6 +21,10 @@ public final class PlayerData {
     public final MovementTracker movement = new MovementTracker();
     public final ShadowPlayer shadow = new ShadowPlayer();
     public final VelocityState velocity = new VelocityState();
+
+    /** 击退速度账本（P2-8，学 NCP）：识别"发出但从未消费"的击退（默认关子检测）。 */
+    public final com.ycbr.anticheat.simulation.VelocityLedger velocityLedger
+            = new com.ycbr.anticheat.simulation.VelocityLedger();
     public final Queue<Long> attackTimes = new ConcurrentLinkedQueue<Long>();
     public final Queue<Long> placeTimes = new ConcurrentLinkedQueue<Long>();
     public final PlacePoints placePoints = new PlacePoints();
@@ -209,6 +213,8 @@ public final class PlayerData {
     public volatile int kbIssuedServerTick;
     /** 击退包预计到达客户端的服务器 tick（发送 tick + ceil(RTT/50)）。 */
     public volatile int kbArrivalServerTick;
+
+    public volatile int kbLedgerStreak;
 
     // ---- 惩罚框架（Phase 0.4）----
     /** 攻击阻断截止时间（ms），此前 onAttack 不派发到检测。 */
