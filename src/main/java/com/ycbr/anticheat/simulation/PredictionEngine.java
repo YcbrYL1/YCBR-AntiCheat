@@ -261,7 +261,11 @@ public final class PredictionEngine {
         for (int s = 0; s < speedFactors.length; s++) {
             for (int j = 0; j < jumpFlags.length; j++) {
                 boolean jump = jumpFlags[j] && onGround;
-                boolean effectiveSprint = sprinting && speedFactors[s] == SPRINT_MODIFIER;
+                // 疾跑行（factor==SPRINT_MODIFIER）的输入/冲量不依赖 sprinting 标志：
+                // 客户端先发移动包后发 START_SPRINTING（或标志丢失/滞后）时
+                // m.sprinting=false 但玩家实际在疾跑；若疾跑行按非疾跑基础速度计算，
+                // maxH 低于实际位移 → sim-speed 误判正常走路。过预测是安全方向。
+                boolean sprintRow = speedFactors[s] == SPRINT_MODIFIER;
                 double factor = speedFactors[s];
 
                 double hFriction = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
@@ -277,7 +281,7 @@ public final class PredictionEngine {
                     if (headBlocked) {
                         motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
                     }
-                    if (effectiveSprint) {
+                    if (sprintRow) {
                         double rad = yaw * Math.PI / 180.0;
                         motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
                         motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
@@ -286,10 +290,10 @@ public final class PredictionEngine {
 
                 double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
                 double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
-                        * (sprinting ? SPRINT_MODIFIER : 1.0);
+                        * (sprintRow ? SPRINT_MODIFIER : 1.0);
                 double inputSpeed;
                 if (inLiquid) {
-                    inputSpeed = baseSpeed * ((onGround && sprinting) ? 0.1 : LIQUID_INPUT_FACTOR);
+                    inputSpeed = baseSpeed * ((onGround && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
                 } else if (onGround) {
                     inputSpeed = baseSpeed * f6;
                 } else {
@@ -385,6 +389,8 @@ public final class PredictionEngine {
         for (int s = 0; s < speedFactors.length; s++) {
             for (int jumpAttempt = 0; jumpAttempt <= 1; jumpAttempt++) {
                 boolean jumpOnTick0 = (jumpAttempt == 1) && onGround;
+                // 疾跑行输入/冲量不依赖 sprinting 标志（原因同单 tick 候选）。
+                boolean sprintRow = speedFactors[s] == SPRINT_MODIFIER;
                 double factor = speedFactors[s];
 
                 double motX = motionX;
@@ -417,10 +423,10 @@ public final class PredictionEngine {
 
                     double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
                     double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
-                            * (sprinting ? SPRINT_MODIFIER : 1.0);
+                            * (sprintRow ? SPRINT_MODIFIER : 1.0);
                     double inputSpeed;
                     if (inLiquid) {
-                        inputSpeed = baseSpeed * ((ground && sprinting) ? 0.1 : LIQUID_INPUT_FACTOR);
+                        inputSpeed = baseSpeed * ((ground && sprintRow) ? 0.1 : LIQUID_INPUT_FACTOR);
                     } else if (ground) {
                         inputSpeed = baseSpeed * f6;
                     } else {
