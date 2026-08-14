@@ -561,6 +561,37 @@ git commit -m "docs: Phase 3 combat statistics results"
 - 回归：现有 12+ 测试全部通过（新增 FastClickLogic 3 个）
 - 默认关闭项：aimstat（统计层）、ML 增强——线上观察 1-2 周误判日志后开启
 
+## 实施结果（2026-08-14 完成）
+
+**提交序列（全部 BUILD SUCCESS，最终 54/54 测试通过，YCBR.jar 242005 字节）：**
+
+| 提交 | 内容 |
+|---|---|
+| `2d462b0` | 任务 1：AimStatsLogic（6 信号：entropy/IQR/KS/Jiff/zscore/kurtosis）+ AimStatsLogicTest 6 测试 |
+| `7be1fd0` | 任务 2：AimStatisticsCheck + CheckType.AIMSTAT + CheckRegistry.onRotation 分发 + config aimstat 段（默认关） |
+| `e6e2768` | 任务 3：KillAura 交叉验证（shouldPunish/flagGated/AIM_GATED_SUBS 9 子检测 + config killaura.aimstat-cross） |
+| `07bd9b7` | 任务 4：FastClickLogic（峰度/熵机械节奏）+ FastClickLogicTest 3 测试 + **修复 Statistics.kurtosis 尺度依赖 bug** |
+| `3407421` | 任务 5：Reach 多帧视角枚举 + 实体插值碰撞盒（MathUtil 增加 maxDistance 射线重载） |
+| `fd8409c` | 任务 6：DatasetManager（/ycbr record/stoprecord，文件名消毒防路径穿越）+ AimStatisticsCheck 窗口落盘 |
+| `c5a46ca` | 任务 7：SimpleMLP（9 维特征 × 8 隐藏，CSV 权重加载）+ SimpleMLPTest 4 测试 + docs/ml/README.md |
+
+**对计划的偏离（设计决策，均已落实）：**
+- **KS 语义反转**：真人瞄准为尖峰分布，KS 判定改为"对均匀分布偏差过小 = 过度均匀 = 随机化修饰"（`ks < ks-min-uniform` 命中），而非计划原文"偏差过大"
+- **z-score 需 ≥3 个离群**：单次真人 flick 不算机械（首次测试 10/10 误报后修正），新增 repeatedSnaps 测试
+- **Kurtosis 修复**：原实现混合标准化 4 阶矩与未标准化方差（尺度依赖，大数值恒为 -3）；改为原始矩 m4/m2²-3，FastClickLogic/AimStatsLogic 均受益
+- **KillAura 门控范围**：只包裹 9 个瞄准模式子检测（AimModulo360/AimStep/GcdStable/GcdGrid/ConstStep/AxisAsym/BigRot/Angle/Switch），非瞄准子检测保持直判——避免统计信号缺失造成假阴性
+- **交叉信号带时间戳**：aimStatSignalTime + signal-fresh-ms: 10000 解决 crossSignals 无过期机制问题
+- **Reach 射线限距**：公共 rayIntersectsAabb 原为无限射线，新增 maxDistance 参数重载防"远处盒体误放行"
+
+**config 变更摘要：**
+- `checks.aimstat`（默认关）：entropy-max/iqr-min/ks-min-uniform/jiff-pattern-len/jiff-max/zscore-threshold/kurtosis-max/signal-fresh-ms/vl-before-flag + strict 变体 + ml-enabled/ml-threshold
+- `checks.killaura.aimstat-cross: true`
+- `checks.fastclick.mechanical.kurtosis-max: -1.0`（+ vl-before-flag）
+- `checks.reach.multi-frame.enabled/window-ticks/expand`
+- `settings.dataset.enabled: false`
+
+**默认关闭项：** aimstat 统计层、ML 增强（`ml-enabled: false`）——线上观察 1-2 周误判日志后开启
+
 ## 风险与注意事项
 
 - **统计层误判**：熵/KS/IQR 对真人也敏感（高灵敏度玩家、瞄准练习场）。多信号交叉（启发式+统计同时命中才 punish）是核心保护，单一信号永不 punish
