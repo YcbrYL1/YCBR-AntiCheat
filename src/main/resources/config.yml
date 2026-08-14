@@ -50,6 +50,7 @@ checks:
     enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for KillAura"
+    aimstat-cross: true
     reach:
       enabled: true
       max-distance: 3.05

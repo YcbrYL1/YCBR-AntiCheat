@@ -21,6 +21,44 @@ public final class KillAuraCheck extends Check {
     private static final double EYE_STANDING = 1.62D;
     private static final double EYE_SNEAKING = 1.54D;
 
+    /**
+     * 需要与统计层（aim-stat 信号）交叉验证的启发式子检测。
+     * 这些子检测判定"瞄准模式"，对统计信号敏感；其余子检测
+     * （selfinteract/autoblock/noswing/post/multiinteract/cps/reach/throughwalls 等）
+     * 与瞄准模式无关，保持直判，避免引入假阴性。
+     */
+    private static final Set<String> AIM_GATED_SUBS = new java.util.HashSet<String>(
+            java.util.Arrays.asList("AimModulo360", "AimStep", "GcdStable", "GcdGrid",
+                    "ConstStep", "AxisAsym", "BigRot", "Angle", "Switch"));
+
+    /**
+     * 统计层交叉门：aimstat 未启用/未收集满样本 → 维持原判（不降级）；
+     * 启用后要求 aim-stat 信号命中且新鲜，否则只记启发式信号不 punish。
+     */
+    private boolean shouldPunish(PlayerData data, String sub) {
+        if (!AIM_GATED_SUBS.contains(sub)) {
+            return true;
+        }
+        if (!cfg.enabled("aimstat") || !cfg.raw().getBoolean("checks.killaura.aimstat-cross", true)) {
+            return true;
+        }
+        if (data.statSampleCount < com.ycbr.anticheat.check.combat.aim.AimStatsLogic.MIN_SAMPLES) {
+            return true; // 冷启动：统计层尚无判断力
+        }
+        boolean fresh = System.currentTimeMillis() - data.aimStatSignalTime
+                < cfg.i("checks.aimstat.signal-fresh-ms", 10000);
+        return signalCount(data, "aim-stat") >= 1 && fresh;
+    }
+
+    /** 启发式 flag 出口：未通过交叉门时只投启发式信号，不 punish。 */
+    private void flagGated(PlayerData data, String sub, String info) {
+        if (shouldPunish(data, sub)) {
+            flag(data, sub, info);
+        } else {
+            addSignal(data, "heur-" + sub);
+        }
+    }
+
     public KillAuraCheck(AntiCheatManager manager) {
         super(CheckType.KILLAURA, manager);
     }
@@ -113,7 +151,7 @@ public final class KillAuraCheck extends Check {
             if (++data.modulo360Streak >= si("modulo360.min-streak", 2, 1)) {
                 data.modulo360Streak = 0;
                 if (bump(data, "modulo360", 1D, i("modulo360.vl-before-flag", 2))) {
-                    flag(data, "AimModulo360", "yaw snap " + MathUtil.round(rawDelta, 1));
+                    flagGated(data, "AimModulo360", "yaw snap " + MathUtil.round(rawDelta, 1));
                 }
             }
         } else {
@@ -140,7 +178,7 @@ public final class KillAuraCheck extends Check {
         if (step) {
             if (++data.aimStepStreak >= (isStrict() ? 2 : 3)) {
                 if (bump(data, "aimstep", 1D, i("aimstep.vl-before-flag", 8))) {
-                    flag(data, "AimStep", "dYaw=" + MathUtil.round(dYaw, 4) + " dPitch=" + MathUtil.round(dPitch, 2));
+                    flagGated(data, "AimStep", "dYaw=" + MathUtil.round(dYaw, 4) + " dPitch=" + MathUtil.round(dPitch, 2));
                 }
             }
         } else {
@@ -160,7 +198,7 @@ public final class KillAuraCheck extends Check {
         if (isSubEnabled("gcd") && g > 0L && g < 131072L && MathUtil.stdDev(deltas) < 0.25D) {
             if (++data.gcdStreak >= (isStrict() ? 3 : 6) && MathUtil.mean(deltas) > 1D) {
                 if (bump(data, "gcd", 1D, i("gcd.vl-before-flag", 6))) {
-                    flag(data, "GcdStable", "gcd=" + MathUtil.round(g / MathUtil.EXPANDER, 5) + " streak=" + data.gcdStreak);
+                    flagGated(data, "GcdStable", "gcd=" + MathUtil.round(g / MathUtil.EXPANDER, 5) + " streak=" + data.gcdStreak);
                 }
             }
         } else {
@@ -197,7 +235,7 @@ public final class KillAuraCheck extends Check {
                     }
                     if (aligned >= n - 1 && dots.size() >= 3) {
                         if (bump(data, "gcdgrid", 1D, i("gcdgrid.vl-before-flag", 6))) {
-                            flag(data, "GcdGrid", "mode=" + MathUtil.round(modeDeg, 5)
+                            flagGated(data, "GcdGrid", "mode=" + MathUtil.round(modeDeg, 5)
                                     + " aligned=" + aligned + "/" + n + " dots=" + dots.size());
                         }
                     } else {
@@ -212,7 +250,7 @@ public final class KillAuraCheck extends Check {
         List<Double> deltas = data.aimDeltas;
         if (deltas.size() >= (isStrict() ? 10 : 20) && MathUtil.stdDev(deltas) < 0.05D && MathUtil.mean(deltas) > 1D) {
             if (bump(data, "conststep", 1D, i("conststep.vl-before-flag", 6))) {
-                flag(data, "ConstStep", "std=" + MathUtil.round(MathUtil.stdDev(deltas), 4) + " n=" + deltas.size());
+                flagGated(data, "ConstStep", "std=" + MathUtil.round(MathUtil.stdDev(deltas), 4) + " n=" + deltas.size());
             }
         } else {
             drain(data, "conststep", 0.05D);
@@ -229,7 +267,7 @@ public final class KillAuraCheck extends Check {
         double varMin = d("axisasym.var-min", 20D);
         if ((varYaw < varMax && varPitch > varMin) || (varPitch < varMax && varYaw > varMin)) {
             if (bump(data, "axisasym", 1D, i("axisasym.vl-before-flag", 6))) {
-                flag(data, "AxisAsym", "varYaw=" + MathUtil.round(varYaw, 2) + " varPitch=" + MathUtil.round(varPitch, 2));
+                flagGated(data, "AxisAsym", "varYaw=" + MathUtil.round(varYaw, 2) + " varPitch=" + MathUtil.round(varPitch, 2));
             }
         } else {
             drain(data, "axisasym", 0.05D);
@@ -246,7 +284,7 @@ public final class KillAuraCheck extends Check {
             return;
         }
         if (bump(data, "bigrot", 1D, i("bigrot.vl-before-flag", 3))) {
-            flag(data, "BigRot", "large turns=" + queue.size()
+            flagGated(data, "BigRot", "large turns=" + queue.size()
                     + " in " + i("bigrot.window-ms", 800) + "ms");
         }
     }
@@ -402,7 +440,7 @@ public final class KillAuraCheck extends Check {
             return;
         }
         if (bump(data, "switch", 1D, i("switch.vl-before-flag", 2))) {
-            flag(data, "Switch", "target switch " + switchMs + "ms ratio=" + MathUtil.round(ratio, 2));
+            flagGated(data, "Switch", "target switch " + switchMs + "ms ratio=" + MathUtil.round(ratio, 2));
         }
     }
 
@@ -624,7 +662,7 @@ public final class KillAuraCheck extends Check {
             if (angleHit(data, target, yaw, pitch)) {
                 drain(data, "angle", 0.05D);
             } else if (bump(data, "angle", 1D, i("angle.vl-before-flag", 6))) {
-                flag(data, "Angle", "crosshair not on hitbox");
+                flagGated(data, "Angle", "crosshair not on hitbox");
             }
         }
         data.pendingAngleTargets.clear();
