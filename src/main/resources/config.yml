@@ -333,8 +333,7 @@ checks:
     enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for NoSlow"
-    deceleration: 1.0
-    per-tick-budget: 0.03
+    tolerance: 0.045
     streak: 2
     vl-before-flag: 4
   autotool:
