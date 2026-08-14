@@ -176,7 +176,9 @@ public final class AsyncPacketListener {
             manager.getRegistry().onBadPacket(data, x, y, z);
             return;
         }
-        data.lastPositionMillis = System.currentTimeMillis();
+        long nowMs = System.currentTimeMillis();
+        data.lastMoveIntervalMs = data.lastPositionMillis > 0L ? nowMs - data.lastPositionMillis : -1L;
+        data.lastPositionMillis = nowMs;
         float yaw = (float) data.lastYaw;
         float pitch = (float) data.lastPitch;
         if (withRotation) {

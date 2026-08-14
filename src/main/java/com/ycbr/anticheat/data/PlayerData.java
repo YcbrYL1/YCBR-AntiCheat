@@ -154,6 +154,7 @@ public final class PlayerData {
     public volatile long lastAttackTargetTime;
     public volatile long lastRotationTime;
     public volatile long lastPositionMillis;
+    public volatile long lastMoveIntervalMs;
     public volatile long joinedMillis;
     public volatile long lastBlinkFlagTime;
     public volatile int lastSprintAction;
