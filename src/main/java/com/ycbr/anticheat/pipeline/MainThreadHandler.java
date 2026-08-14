@@ -18,6 +18,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import com.ycbr.anticheat.simulation.WorldProbe;
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.core.AntiCheatManager;
 import com.ycbr.anticheat.core.YCBRConfig;
@@ -250,6 +251,7 @@ public final class MainThreadHandler implements Runnable {
         data.blockOnLadder = feetMat == Material.LADDER || feetMat == Material.VINE
                 || belowMat == Material.LADDER || belowMat == Material.VINE;
         data.blockBelowUnstandable = unstandable(belowMat);
+        data.blockOnStairsOrSlab = WorldProbe.isStepMaterial(belowMat) || WorldProbe.isStepMaterial(feetMat);
         Block top = feet.getRelative(BlockFace.UP, 2);
         data.blockBoxedIn = belowMat.isSolid() && top.getType().isSolid() && !data.blockOnSlime;
     }

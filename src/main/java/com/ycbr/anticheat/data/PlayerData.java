@@ -139,6 +139,9 @@ public final class PlayerData {
     public volatile boolean blockOnLadder;
     public volatile boolean blockBelowUnstandable;
 
+    /** 脚下/脚所在方块是台阶或楼梯（允许 ≤0.6 的自动步进垂直位移）。 */
+    public volatile boolean blockOnStairsOrSlab;
+
     public volatile boolean clientOnGround;
     public volatile boolean prevClientOnGround;
 
