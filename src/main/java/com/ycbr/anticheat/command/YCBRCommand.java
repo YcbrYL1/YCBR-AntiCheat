@@ -71,6 +71,12 @@ public final class YCBRCommand implements CommandExecutor, TabCompleter {
             case "strict":
                 strict(sender, args);
                 break;
+            case "record":
+                record(sender, args);
+                break;
+            case "stoprecord":
+                stopRecord(sender, args);
+                break;
             default:
                 sendUsage(sender);
                 break;
@@ -303,6 +309,35 @@ public final class YCBRCommand implements CommandExecutor, TabCompleter {
                 : "\u5173\u95ed") + "\u3002");
     }
 
+    private void record(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(cfg.prefix() + "&e/ycbr record &f<player> [label] &7- 开始录制数据集 (label: legit|cheat)");
+            return;
+        }
+        String name = args[1];
+        String label = args.length >= 3 ? args[2] : "legit";
+        if (!label.equals("legit") && !label.equals("cheat")) {
+            sender.sendMessage(cfg.prefix() + "&clabel 只能是 legit 或 cheat");
+            return;
+        }
+        if (Bukkit.getPlayerExact(name) == null) {
+            sender.sendMessage(cfg.prefix() + "&cPlayer not found: &f" + name);
+            return;
+        }
+        manager.getDatasetManager().startRecording(name, label);
+        manager.getDatasetManager().writeHeader(name);
+        sender.sendMessage(cfg.prefix() + "&a开始录制 &f" + name + " &7(label=" + label + ")，样本写入 plugins/YCBR/dataset/");
+    }
+
+    private void stopRecord(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(cfg.prefix() + "&e/ycbr stoprecord &f<player>");
+            return;
+        }
+        manager.getDatasetManager().stopRecording(args[1]);
+        sender.sendMessage(cfg.prefix() + "&a已停止录制 &f" + args[1]);
+    }
+
     private void sendHelp(CommandSender sender) {
         String[][] lines = new String[][] {
                 { "&e/ycbr help", "&7查看本帮助" },
@@ -314,6 +349,8 @@ public final class YCBRCommand implements CommandExecutor, TabCompleter {
                 { "&e/ycbr debug [玩家|半径]", "&7查看玩家实时数据（ping/CPS/移动/违规值）" },
                 { "&e/ycbr premium add|remove|list <名字>", "&7正版白名单管理（免注册/登录）" },
                 { "&e/ycbr strict [on|off]", "&7严格模式开关（叠 timeTest 不叠违规值）" },
+                { "&e/ycbr record <玩家> [legit|cheat]", "&7开始录制数据集样本（MLP 训练用）" },
+                { "&e/ycbr stoprecord <玩家>", "&7停止录制数据集样本" },
                 { "&e/timeban <玩家>", "&7临时封禁玩家（默认1小时，北京时间显示）" },
                 { "&e/untimeban <玩家>", "&7解除封禁" },
                 { "&e/register <密码> <密码>", "&7注册账号（密码4-32位）" },
@@ -354,7 +391,7 @@ public final class YCBRCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<String>();
         if (args.length == 1) {
             for (String option : new String[] { "reload", "alerts", "gui", "toggle", "list", "debug", "premium",
-                    "strict", "help" }) {
+                    "strict", "record", "stoprecord", "help" }) {
                 if (option.startsWith(args[0].toLowerCase())) {
                     completions.add(option);
                 }

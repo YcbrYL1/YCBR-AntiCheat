@@ -15,6 +15,8 @@ settings:
   auth-premium-players: []
   strict-mode: false
   ycbrop-players: []
+  dataset:
+    enabled: false
   bot-verification:
     enabled: true
     max-accounts-per-ip: 5
