@@ -412,6 +412,12 @@ checks:
       enabled: true
       window-ticks: 2
       expand: 0.05
+    reach-mod:
+      enabled: false
+      edge-streak-required: 8
+      shrink-step: 0.05
+      max-shrink: 0.5
+      edge-band: 0.15
     vl-before-flag: 2
   wrongturn:
     enabled: true

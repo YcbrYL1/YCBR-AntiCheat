@@ -10,6 +10,12 @@ import com.ycbr.anticheat.util.MathUtil;
 
 public final class ReachCheck extends Check {
 
+    /** 临界距离动态收缩（默认关）：长期擦边攻击逐步收紧允许距离。 */
+    private final ReachModLogic reachMod = new ReachModLogic(
+            i("reach-mod.edge-streak-required", 8),
+            d("reach-mod.shrink-step", 0.05D),
+            d("reach-mod.max-shrink", 0.5D));
+
     public ReachCheck(AntiCheatManager manager) {
         super(CheckType.REACH, manager);
     }
@@ -26,6 +32,10 @@ public final class ReachCheck extends Check {
         }
         double maxReach = sd("max-reach", 3.1D, 3.0D);
         double leniency = sd("leniency", 0.03D, 0.0D);
+        boolean reachModEnabled = isSubEnabled("reach-mod");
+        if (reachModEnabled) {
+            maxReach -= reachMod.currentModifier();
+        }
         double dx = target.x - data.movement.lastX;
         double dz = target.z - data.movement.lastZ;
         double halfWidth = Math.max(0.1D, target.width / 2.0D);
@@ -53,6 +63,15 @@ public final class ReachCheck extends Check {
         double victimAllowance = Math.min(isStrict() ? 0.25D : 0.4D, snapTicks * Math.max(closing, 0.2D));
         double allowance = attackAllowance + victimAllowance;
         if (distance - allowance <= maxReach + leniency) {
+            if (reachModEnabled) {
+                // 临界距离（逼近收缩后的上限）视为边缘命中；否则正常攻击 → 衰减
+                double edgeBand = d("reach-mod.edge-band", 0.15D);
+                if (distance - allowance > maxReach - edgeBand) {
+                    reachMod.onEdgeAttack(1.0D);
+                } else {
+                    reachMod.onCleanAttack();
+                }
+            }
             drain(data, "overreach", 0.5D);
             return;
         }
