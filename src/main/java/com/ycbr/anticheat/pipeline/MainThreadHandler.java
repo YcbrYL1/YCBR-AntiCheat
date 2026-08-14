@@ -238,6 +238,7 @@ public final class MainThreadHandler implements Runnable {
         Material feetMat = feet.getType();
         data.blockOnIce = belowMat == Material.ICE || belowMat == Material.PACKED_ICE;
         data.blockOnSlime = belowMat == Material.SLIME_BLOCK;
+        data.blockOnSoulSand = belowMat == Material.SOUL_SAND;
         data.blockNearLiquid = liquid(belowMat) || liquid(feetMat);
         Block above = feet.getRelative(BlockFace.UP);
         data.blockInWeb = feetMat == Material.WEB || above.getType() == Material.WEB;

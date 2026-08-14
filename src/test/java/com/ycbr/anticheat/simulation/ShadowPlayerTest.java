@@ -56,11 +56,20 @@ class ShadowPlayerTest {
         sp.sync(0, 0, 0, 0, 0, 0, true, 0f, System.currentTimeMillis());
         // walk forward on ground, no jump, no sprint
         sp.tick(0.6f, false, false, false, 0, 0, 0);
-        // After tick: motX = 0.1 * cos(0) * 0.546 = 0.0546
-        assertEquals(0.1 * 0.546, sp.motionX, 0.01);
+        // 状态约定：motX = 携带(0)*0.546 + 输入(0.1) = 0.1（位置增量）
+        assertEquals(0.1, sp.motionX, 0.01);
         assertEquals(0.0, sp.motionZ, 0.01);
-        // motY = 0 - 0.08 = -0.08; -0.08 * 0.98 = -0.0784
-        assertEquals(-0.0784, sp.motionY, 0.01);
+        // 地面站立：地板碰撞吸收重力，垂直状态为 0（下一 tick 不会误判为下落）
+        assertEquals(0.0, sp.motionY, 0.01);
+    }
+
+    @Test
+    void tick_liquidVerticalOrderMatchesNms() {
+        ShadowPlayer sp = new ShadowPlayer();
+        sp.sync(0, 0, 0, 0, 0.3, 0, false, 0f, System.currentTimeMillis());
+        // NMS 水分支：motY = 0.3*0.8 - 0.02 = 0.22（先乘后减，不是 (0.3-0.02)*0.8）
+        sp.tick(0.6f, false, false, false, 0, 0, 0, true, false, false, false, false);
+        assertEquals(0.3 * 0.8 - 0.02, sp.motionY, 0.001);
     }
 
     @Test
