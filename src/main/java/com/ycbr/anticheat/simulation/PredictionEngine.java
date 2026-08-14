@@ -70,6 +70,44 @@ public final class PredictionEngine {
     /** 头顶被挡时跳跃上限（简化碰撞：跳不起高） */
     public static final double HEAD_BLOCKED_JUMP_CAP = 0.3;
 
+    /** 墙碰撞截断生效上限：墙距 ≥ 此值视为无墙（吸收主线程探测 1 tick 滞后误差）。 */
+    public static final double WALL_TRUNCATION_LIMIT = 0.65;
+
+    /**
+     * 水平墙碰撞截断（2D 逐轴近似，1.8 Entity.move 逐轴碰撞语义）。
+     *
+     * <p>把位移向量投影到 (fwd, right) 轴（与输入公式同款三角函数约定），各轴独立
+     * 截断到对应墙距，再反投影回世界坐标。逐轴独立截断即"滑墙"：撞墙轴归零/截短，
+     * 另一轴保留。墙距为 {@link Double#POSITIVE_INFINITY} 表示无墙不截断；墙距 ≥
+     * {@link #WALL_TRUNCATION_LIMIT} 视为无墙（探测滞后安全）。</p>
+     *
+     * @param deltaX   预测位移 X
+     * @param deltaZ   预测位移 Z
+     * @param yaw      玩家 yaw（引擎约定：yaw=0 前进=+X，右=+Z）
+     * @param wallFwd  前方墙距（yaw 方向），无墙 = POSITIVE_INFINITY
+     * @param wallLeft 左侧墙距（yaw-90°），无墙 = POSITIVE_INFINITY
+     * @param wallRight 右侧墙距（yaw+90°），无墙 = POSITIVE_INFINITY
+     * @return 截断后的 {deltaX, deltaZ}
+     */
+    public static double[] applyCollision(double deltaX, double deltaZ, float yaw,
+            double wallFwd, double wallLeft, double wallRight) {
+        double rad = yaw * Math.PI / 180.0;
+        double cos = Math.cos(rad);
+        double sin = Math.sin(rad);
+        double fwd = deltaX * cos + deltaZ * sin;
+        double right = -deltaX * sin + deltaZ * cos;
+        if (wallFwd >= 0.0 && wallFwd < WALL_TRUNCATION_LIMIT && fwd > wallFwd) {
+            fwd = wallFwd;
+        }
+        if (wallRight >= 0.0 && wallRight < WALL_TRUNCATION_LIMIT && right > wallRight) {
+            right = wallRight;
+        }
+        if (wallLeft >= 0.0 && wallLeft < WALL_TRUNCATION_LIMIT && right < -wallLeft) {
+            right = -wallLeft;
+        }
+        return new double[] {fwd * cos - right * sin, fwd * sin + right * cos};
+    }
+
     public static final class Result {
         public final double deltaX;
         public final double deltaZ;
@@ -244,7 +282,7 @@ public final class PredictionEngine {
     }
 
     /**
-     * 完整候选生成：{idle, walk, sprint, sneak} × {不跳, 跳}。
+     * 完整候选生成：{idle, walk, sprint, sneak} × {不跳, 跳} × strafe。
      * 覆盖"玩家可能的一切合法输入"，实际位移命中任一候选即合法。
      */
     public static Candidate[] candidates(
@@ -252,6 +290,22 @@ public final class PredictionEngine {
             double frictionFactor, boolean sprinting, double speedLevel, double jumpLevel,
             boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
             boolean usingItem) {
+        return candidates(motionX, motionY, motionZ, onGround, yaw, frictionFactor,
+                sprinting, speedLevel, jumpLevel, inLiquid, inWeb, onLadder, headBlocked,
+                usingItem, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+                Double.POSITIVE_INFINITY);
+    }
+
+    /**
+     * 带墙距的完整候选生成：每个候选位移套 {@link #applyCollision} 截断。
+     * 墙距来自主线程上一 tick 探测（滞后），截断只发生在 < WALL_TRUNCATION_LIMIT
+     * 的距离上，对无墙场景零行为变化。
+     */
+    public static Candidate[] candidates(
+            double motionX, double motionY, double motionZ, boolean onGround, float yaw,
+            double frictionFactor, boolean sprinting, double speedLevel, double jumpLevel,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
+            boolean usingItem, double wallFwd, double wallLeft, double wallRight) {
 
         List<Candidate> list = new ArrayList<Candidate>();
         double[] speedFactors = {0.0, 1.0, SPRINT_MODIFIER, SNEAK_FACTOR};
@@ -340,7 +394,8 @@ public final class PredictionEngine {
                         }
                     }
 
-                    list.add(new Candidate(motX, motZ, motY,
+                    double[] truncated = applyCollision(motX, motZ, yaw, wallFwd, wallLeft, wallRight);
+                    list.add(new Candidate(truncated[0], truncated[1], motY,
                             speedLabels[s] + (jump ? "+jump" : "") + "+strafe=" + (int) strafes[st]));
                 }
             }
@@ -382,6 +437,19 @@ public final class PredictionEngine {
             boolean sprinting, double speedLevel, double jumpLevel, int ticks,
             boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
             boolean usingItem) {
+        return candidatesMultiTick(motionX, motionZ, motionY, onGround, yaw, frictionFactor,
+                sprinting, speedLevel, jumpLevel, ticks,
+                inLiquid, inWeb, onLadder, headBlocked, usingItem,
+                Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+    }
+
+    /** 带墙距的多 tick 候选（累计位移套 {@link #applyCollision}）。 */
+    public static Candidate[] candidatesMultiTick(
+            double motionX, double motionZ, double motionY,
+            boolean onGround, float yaw, double frictionFactor,
+            boolean sprinting, double speedLevel, double jumpLevel, int ticks,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
+            boolean usingItem, double wallFwd, double wallLeft, double wallRight) {
 
         if (ticks <= 1) {
             return candidates(motionX, motionY, motionZ, onGround, yaw, frictionFactor,
@@ -482,7 +550,8 @@ public final class PredictionEngine {
                         ground = false;
                     }
 
-                    list.add(new Candidate(totalDX, totalDZ, totalDY,
+                    double[] truncated = applyCollision(totalDX, totalDZ, yaw, wallFwd, wallLeft, wallRight);
+                    list.add(new Candidate(truncated[0], truncated[1], totalDY,
                             speedLabels[s] + (jumpOnTick0 ? "+jump" : "") + "x" + ticks
                                     + "+strafe=" + (int) strafes[st]));
                     // 重置状态以进行下一个 strafe 方向的完整模拟
