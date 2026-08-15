@@ -40,4 +40,48 @@ class FastClickLogicTest {
         }
         assertFalse(logic.mechanicalPattern(), "cold start should not flag");
     }
+
+    @Test
+    void slowConstantRhythm_notFlagged() {
+        // 挖矿/拆包等慢速恒定节奏（>8.3cps 的高速前置排除）：恒定 400ms 间隔
+        FastClickLogic logic = new FastClickLogic();
+        for (int i = 0; i < 60; i++) {
+            logic.feed(400L);
+        }
+        assertFalse(logic.mechanicalPattern(-1.5D, 120.0D),
+                "慢速恒定节奏（挖矿还击）不应判定为点击宏");
+    }
+
+    @Test
+    void fastOrganicJitter_notFlagged() {
+        // 真人高速手点：60±3ms 抖动（均匀分布，超额峰度≈-1.2 > -1.5，熵≈2.8 > 1）
+        FastClickLogic logic = new FastClickLogic();
+        java.util.Random rnd = new java.util.Random(7L);
+        for (int i = 0; i < 60; i++) {
+            logic.feed(60L + rnd.nextInt(7)); // 57..63
+        }
+        assertFalse(logic.mechanicalPattern(-1.5D, 120.0D),
+                "高速但有自然抖动的手点不应判定为机械");
+    }
+
+    @Test
+    void fastConstantIntervals_stillFlagged() {
+        // 高速恒定宏：50ms 恒定 → 仍命中
+        FastClickLogic logic = new FastClickLogic();
+        for (int i = 0; i < 60; i++) {
+            logic.feed(50L);
+        }
+        assertTrue(logic.mechanicalPattern(-1.5D, 120.0D),
+                "高速恒定间隔（20cps 宏）应命中");
+    }
+
+    @Test
+    void meanGateWorksAtBoundary() {
+        // 平均间隔恰在阈值边缘：>120 不命中（回归防护）
+        FastClickLogic logic = new FastClickLogic();
+        for (int i = 0; i < 40; i++) {
+            logic.feed(125L);
+        }
+        assertFalse(logic.mechanicalPattern(-1.5D, 120.0D));
+    }
 }

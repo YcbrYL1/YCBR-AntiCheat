@@ -55,6 +55,10 @@ checks:
     kick-at-vl: 20
     kick-message: "&cKicked for KillAura"
     aimstat-cross: true
+    # 瞄准启发式子检测（AimStep/Gcd/ConstStep/AxisAsym/BigRot/Angle/Switch）软降级：
+    # false = 兼容旧行为（aimstat 关闭时直判）；true = 仅当 aimstat 交叉信号命中且新鲜
+    # 才 punish，否则只投 heur-* 信号不封禁（消除 aimstat 未就绪时的直判误杀）。
+    heuristic-soft: false
     reach:
       enabled: true
       max-distance: 3.05
@@ -64,18 +68,33 @@ checks:
       exempt-entity-types: "SLIME,MAGMA_CUBE,GIANT,ENDER_DRAGON,WITHER,GUARDIAN"
     angle:
       enabled: true
-      hit-expand: 0.35
+      # 命中盒膨胀：正常 10cps 快速连点时准星会短暂偏移，0.35 偏严（实测误判）；
+      # 0.5 仍能抓 KA 锁定（KA 准星必然大幅偏离目标）。若仍误判，可开 killaura.heuristic-soft
+      hit-expand: 0.5
       ping-expand: 0.002
       turn-exempt-degrees: 25.0
       vl-before-flag: 6
     selfinteract:
       enabled: true
       vl-before-flag: 1
+      hard-cancel: true
+      hard-block-ms: 500
+      # 子级踢人阈值：硬检测自击（KA 经典痕迹）快速清场；其它子项缺省继承 killaura 的 20
+      kick-at-vl: 5
     autoblock:
       enabled: true
-      stale-ms: 150
-      dig-exempt-ms: 200
-      vl-before-flag: 1
+      # 【语义修正】挖掘持续超过该值(ms)后的攻击 = 挖矿中反击/左键挖右键打（1.8 合法）→ 豁免。
+      # 只判"挖掘刚启动(<300ms)就攻击"的 AutoBlock 作弊指纹（攻击触发的挖掘模拟）。
+      mine-exempt-ms: 300
+      # 受击后豁免：挖矿被攻击→松手→digging 复位延迟期间不判
+      hit-exempt-ms: 800
+      # 连续次数：挖掘早期攻击需连续 3 次（高速连击）才 flag
+      streak: 3
+      # 攻击间隔 <150ms（>6.7cps）才算连续；正常攻击速度会断开 streak
+      streak-gap-ms: 150
+      vl-before-flag: 2
+      # 只警示不封禁：高于 killaura 的 20 → 永不触发 KillAura 封禁（低置信子项）
+      kick-at-vl: 25
     inventorycombo:
       enabled: true
       attack-window-ms: 100
@@ -152,6 +171,7 @@ checks:
       enabled: true
       max-gap-ms: 100
       vl-before-flag: 2
+      burst-cancel-ms: 400
     multitarget:
       enabled: false
       switch-gap-ms: 800
@@ -258,6 +278,9 @@ checks:
       precise-expected-min: 0.3
       precise-pre-speed: 0.06
       precise-streak: 2
+      # 中等削减带（补检测空洞）：保留 80%~97% 的击退削减（Grim 能抓的 90% 场景）
+      mid-reduce-min: 0.8
+      mid-reduce-streak: 3
       vl-before-flag: 2
     jumpreset:
       enabled: true
@@ -282,8 +305,10 @@ checks:
       vl-before-flag: 3
   simulation:
     enabled: false
+    grid-max-age-ms: 250
     sim-speed:
-      enabled: false
+      enabled: true
+      collision-replay: true
       horizontal-tolerance: 0.01
       liquid-tolerance-multiplier: 2.0
       vl-before-flag: 8
@@ -293,7 +318,7 @@ checks:
       strict:
         horizontal-tolerance: 0.005
     sim-fly:
-      enabled: false
+      enabled: true
       vertical-tolerance: 0.02
       vl-before-flag: 10
       strict:
@@ -415,7 +440,9 @@ checks:
     cooldown-ms: 5000
     vl-before-flag: 2
     mechanical:
-      kurtosis-max: -1.0
+      kurtosis-max: -1.5
+      # 高速前置：平均点击间隔超过该值（ms）不算点击宏（排除挖矿/慢速恒定节奏误判）
+      max-mean-interval-ms: 120
       vl-before-flag: 3
   reach:
     enabled: true

@@ -26,11 +26,14 @@ public final class FastClickCheck extends Check {
         if (data.ping > i("max-ping", 200)) {
             return;
         }
-        data.attackTimes.add(now);
-        data.attackTimes.removeIf(t -> t < now - CLEANUP_WINDOW_MS);
+        // 【关键修复】burst 窗口用本检测独立队列 fastClickTimes，不能复用 data.attackTimes——
+        // KillAuraCheck.checkCps（cps 默认开）在 onAttack 派发链中先执行并向 attackTimes
+        // 写入本次攻击时间戳，双写会让 burst 计数翻倍（实际 N 次攻击数出 2N）。
+        data.fastClickTimes.add(now);
+        data.fastClickTimes.removeIf(t -> t < now - CLEANUP_WINDOW_MS);
         int window = si("burst-window-ms", 200, 250);
         int burst = 0;
-        for (Long t : data.attackTimes) {
+        for (Long t : data.fastClickTimes) {
             if (now - t <= window) {
                 burst++;
             }
@@ -47,14 +50,19 @@ public final class FastClickCheck extends Check {
         } else {
             drain(data, "fastclick", 0.1D);
         }
-        if (data.lastAttackTime > 0) {
-            logic.feed(Math.max(1L, now - data.lastAttackTime));
-            if (logic.sampleCount() >= 40 && logic.mechanicalPattern(d("mechanical.kurtosis-max", -1.0D))) {
+        // 【关键修复】间隔基准用本检测独立字段 lastFastClickAttackTime，不能复用
+        // data.lastAttackTime——KillAuraCheck 在 onAttack 派发链中先执行并已把它更新为
+        // 本次攻击时间戳，复用会导致间隔恒为 ~0ms、样本全污染、机械判定必然命中。
+        if (data.lastFastClickAttackTime > 0) {
+            logic.feed(Math.max(1L, now - data.lastFastClickAttackTime));
+            if (logic.sampleCount() >= 40 && logic.mechanicalPattern(
+                    d("mechanical.kurtosis-max", -1.5D),
+                    d("mechanical.max-mean-interval-ms", 120.0D))) {
                 if (bump(data, "mechanical", 1D, i("mechanical.vl-before-flag", 3))) {
                     flag(data, "Mechanical", "kurtosis/entropy click rhythm");
                 }
             }
         }
-        data.lastAttackTime = now;
+        data.lastFastClickAttackTime = now;
     }
 }

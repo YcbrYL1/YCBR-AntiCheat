@@ -9,6 +9,7 @@ import com.ycbr.anticheat.data.context.MoveContext;
 import com.ycbr.anticheat.simulation.KnownExemptions;
 import com.ycbr.anticheat.simulation.PredictionEngine;
 import com.ycbr.anticheat.simulation.ShadowPlayer;
+import com.ycbr.anticheat.simulation.VoxelGrid;
 import com.ycbr.anticheat.simulation.WorldProbe;
 
 /**
@@ -28,6 +29,13 @@ public final class SimulationCheck extends Check {
     @Override
     protected void onMove(MoveContext ctx) {
         if (!isEnabled()) {
+            return;
+        }
+        // sim-speed / sim-fly 子开关（config checks.simulation.sim-speed.enabled 等）：
+        // 此前子开关被忽略（顶层开即全跑），用户无法单独控制——已接线生效。
+        boolean speedOn = isSubEnabled("sim-speed");
+        boolean flyOn = isSubEnabled("sim-fly");
+        if (!speedOn && !flyOn) {
             return;
         }
         PlayerData data = ctx.data;
@@ -50,8 +58,39 @@ public final class SimulationCheck extends Check {
         }
         int ticks = (int) Math.min(MAX_TICKS, Math.max(1, Math.ceil((double) elapsed / TICK_MS)));
 
+        // P1 碰撞重演路径：体素网格新鲜可用时，用 AABB 逐轴解析替代墙距/台阶豁免。
+        // 网格缺失/过期/越界 → 自动回退旧（墙距+豁免）路径，零误判兜底。
+        boolean collisionReplay = cfg.raw().getBoolean(
+                "checks.simulation.sim-speed.collision-replay", true);
+        VoxelGrid grid = null;
+        if (collisionReplay && data.voxelGrid != null) {
+            long maxAge = cfg.raw().getLong("checks.simulation.grid-max-age-ms", 250L);
+            if (data.voxelGrid.isFresh(ctx.arrivalTime, maxAge)) {
+                grid = data.voxelGrid;
+            }
+        }
+
         PredictionEngine.Candidate[] cands;
-        if (ticks > 1) {
+        boolean gridPath = false;
+        if (ticks == 1 && grid != null) {
+            PredictionEngine.Candidate[] g = PredictionEngine.candidatesWithCollision(
+                    shadow.motionX, shadow.motionY, shadow.motionZ,
+                    shadow.onGround, yaw, frictionFactor,
+                    sprinting, speedLevel, jumpLevel,
+                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                    shadow.posX, shadow.posY, shadow.posZ, grid);
+            if (g != null) {
+                cands = g;
+                gridPath = true;
+            } else {
+                cands = PredictionEngine.candidates(
+                        shadow.motionX, shadow.motionY, shadow.motionZ,
+                        shadow.onGround, yaw, frictionFactor,
+                        sprinting, speedLevel, jumpLevel,
+                        probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                        probe.wallFwd, probe.wallLeft, probe.wallRight);
+            }
+        } else if (ticks > 1) {
             cands = PredictionEngine.candidatesMultiTick(
                     shadow.motionX, shadow.motionZ, shadow.motionY,
                     shadow.onGround, yaw, frictionFactor,
@@ -91,6 +130,8 @@ public final class SimulationCheck extends Check {
             vTol *= KnownExemptions.multiTickSqrtFactor(ticks);
         }
 
+        // ---- sim-speed（水平）----
+        if (speedOn) {
         // 水平：模长匹配（方向无关，抗斜向/侧移误判）。idle 候选覆盖静止。
         double maxH = 0.0;
         for (PredictionEngine.Candidate c : cands) {
@@ -135,7 +176,10 @@ public final class SimulationCheck extends Check {
                 drain(data, "sim-speed", 0.02D);
             }
         }
+        }
 
+        // ---- sim-fly（垂直）----
+        if (flyOn) {
         // 垂直：取与最近合法垂直增量的偏差
         double bestVDist = Double.MAX_VALUE;
         for (PredictionEngine.Candidate c : cands) {
@@ -144,9 +188,11 @@ public final class SimulationCheck extends Check {
                 bestVDist = vDist;
             }
         }
-        // 台阶/楼梯自动步进豁免：引擎无步进模型，motY 只能到 0/0.42，
-        // 而走上半砖/楼梯 motY 可达 ±0.5；仅在脚下确为台阶/楼梯地形时放行。
-        boolean stepUp = WorldProbe.stepVerticalAllowed(actualDY, data.blockOnStairsOrSlab);
+        // 台阶/楼梯自动步进豁免：仅旧（无网格）路径需要——引擎无步进模型，
+        // motY 只能到 0/0.42，而走上半砖/楼梯 motY 可达 ±0.5。
+        // 碰撞重演路径下步进由 CollisionResolver 原生解析（候选已含 lift），无需豁免。
+        boolean stepUp = !gridPath
+                && WorldProbe.stepVerticalAllowed(actualDY, data.blockOnStairsOrSlab);
         // 粘液块弹跳豁免：1.8 粘液块落地反弹 |dy| 可达 ~0.63，引擎无弹跳模型。
         boolean slimeBounce = WorldProbe.slimeBounceAllowed(actualDY, data.blockOnSlime);
         boolean vMatch = bestVDist <= vTol || stepUp || slimeBounce;
@@ -164,6 +210,7 @@ public final class SimulationCheck extends Check {
             } else {
                 drain(data, "sim-fly", 0.02D);
             }
+        }
         }
 
         resyncShadow(shadow, ctx, yaw, probe, sprinting, sneaking, speedLevel, jumpLevel);

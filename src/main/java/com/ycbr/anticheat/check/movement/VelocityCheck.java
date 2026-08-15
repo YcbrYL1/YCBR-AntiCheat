@@ -115,6 +115,30 @@ public final class VelocityCheck extends Check {
             } else {
                 data.kbPreciseTicks = 0;
             }
+            // 【修复·检测空洞】中等削减带：ratio ∈ [mid-reduce-min, precise-band-min)
+            // （默认 [0.8, 0.97)，即保留 80%~97%）此前既不低于 partial 阈值（0.5）、
+            // 又不在 precise band（[0.97,1.2]）内——Grim 能抓的"击退保留 90%"在此漏检。
+            // 事务到达窗口（arrival-window ±1 tick）+ 静止前置（kbPreSpeed）保证精确，
+            // 墙/天花板/地面豁免已在外层生效。
+            if (expectedH >= preciseMin && data.kbPreSpeed < d("horizontal.precise-pre-speed", 0.06D)
+                    && m.timeScale >= 0.9D && m.timeScale <= 1.1D) {
+                double midMin = sd("horizontal.mid-reduce-min", 0.8D, 0.85D);
+                double bandMin = sd("horizontal.precise-band-min", 0.97D, 0.95D);
+                if (ratio >= midMin && ratio < bandMin) {
+                    if (++data.kbMidReduceTicks >= si("horizontal.mid-reduce-streak", 3, 2)) {
+                        data.kbMidReduceTicks = 0;
+                        if (bump(data, "horizontal", 1D, i("horizontal.vl-before-flag", 2))) {
+                            flag(data, "HorizontalMidReduce", "KB reduced ratio="
+                                    + MathUtil.round(ratio, 3) + " expected="
+                                    + MathUtil.round(expectedH, 2));
+                        }
+                    }
+                } else {
+                    data.kbMidReduceTicks = 0;
+                }
+            } else {
+                data.kbMidReduceTicks = 0;
+            }
             double minRatio = m.onGround
                     ? sd("horizontal.ratio-ground", 0.15D, 0.2D)
                     : sd("horizontal.ratio-air", 0.25D, 0.35D);

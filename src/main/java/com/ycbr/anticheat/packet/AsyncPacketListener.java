@@ -78,8 +78,15 @@ public final class AsyncPacketListener {
                     handleLook(data, packet);
                 } else if (event.getPacketType() == PacketType.Play.Client.USE_ENTITY) {
                     // Phase 4：实时取消不可能攻击（监听线程同步预检，宁可漏不可杀）
+                    // 硬检测：SelfInteract（自击）/ MultiInteract（突发窗口）同样在监听线程取消
                     int targetId = packet.getIntegers().read(0);
                     if (isAttack(packet) && manager.getRegistry().cancelImpossibleAttack(data, targetId)) {
+                        event.setCancelled(true);
+                        data.attackBlockedUntil = System.currentTimeMillis() + 500L;
+                        return;
+                    }
+                    if (isAttack(packet) && manager.getRegistry()
+                            .cancelHardCombatAttack(data, targetId, player.getEntityId())) {
                         event.setCancelled(true);
                         data.attackBlockedUntil = System.currentTimeMillis() + 500L;
                         return;
@@ -342,21 +349,24 @@ public final class AsyncPacketListener {
 
     private static int blockedStates(Player player, PlayerData data) {
         int s = 0;
+        // 1.8 客户端强制取消/禁止疾跑的权威状态只有：饥饿、潜行、使用物品、水中。
+        // 头顶挡（blockBoxedIn）与失明（BLINDNESS）在 1.8 **不禁疾跑**（客户端无此限制：
+        // 2 格高走廊疾跑、失明时疾跑均合法），故不纳入，避免"顶头跳"等正常操作误判。
         if (player.getFoodLevel() <= 6) {
             s |= SprintLogic.STATE_HUNGRY;
         }
         if (player.isSneaking()) {
             s |= SprintLogic.STATE_SNEAKING;
         }
-        if (data.usingItem || player.isBlocking()) {
+        // 【误判修复】1.8 剑格挡（isBlocking）只减速（motX/Z *= 0.25），客户端不会强制
+        // 取消疾跑——"格挡+疾跑"与快速右键剑是合法 PvP 操作。真"用物品禁疾跑"
+        // （吃/喝/拉弓/牛奶，客户端强制取消疾跑）由 data.usingItem 覆盖，故不再并入
+        // isBlocking，避免快速右键剑瞬间被误判 sprint in blocked state。
+        if (data.usingItem) {
             s |= SprintLogic.STATE_USING_ITEM;
         }
-        if (player.hasPotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS)) {
-            s |= SprintLogic.STATE_BLINDED;
-        }
-        if (data.blockBoxedIn) {
-            s |= SprintLogic.STATE_HEAD_BLOCKED;
-        }
+        // 水中疾跑：客户端 isInWater → setSprinting(false)，收到 START_SPRINT 即异常。
+        // blockNearLiquid 来自主线程探测（1~2 tick 滞后），单次滞后由 vl-before-flag=2 吸收。
         if (data.blockNearLiquid) {
             s |= SprintLogic.STATE_IN_LIQUID;
         }

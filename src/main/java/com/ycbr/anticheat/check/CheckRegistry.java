@@ -112,6 +112,31 @@ public final class CheckRegistry {
                 manager.getMainHandler().currentServerTick(), expand);
     }
 
+    /**
+     * 监听线程同步预检：战斗硬检测（SelfInteract / MultiInteract 突发取消）。
+     * <ul>
+     *   <li>MultiInteract 命中后开出的突发取消窗口内 → 取消攻击包（Grim cancelBuffer 语义）；</li>
+     *   <li>攻击自己（KA 经典痕迹）→ 取消攻击包，并在 actor 线程即时 flag + 攻击阻断。</li>
+     * </ul>
+     */
+    public boolean cancelHardCombatAttack(PlayerData data, int targetId, int playerEntityId) {
+        if (data.op || data.creative) {
+            return false;
+        }
+        KillAuraCheck ka = (KillAuraCheck) byType.get(CheckType.KILLAURA);
+        boolean selfEnabled = ka != null && ka.isEnabled() && ka.isSubEnabled("selfinteract");
+        boolean hardCancelSelf = manager.config().raw().getBoolean(
+                "checks.killaura.selfinteract.hard-cancel", true);
+        if (!KillAuraCheck.shouldHardCancel(data, targetId, playerEntityId,
+                selfEnabled, hardCancelSelf)) {
+            return false;
+        }
+        if (ka != null && targetId == playerEntityId) {
+            data.actor.submit(() -> ka.onSelfInteractHard(data));
+        }
+        return true;
+    }
+
     public void onMove(MoveContext ctx) {
         if (ctx.data.op) {
             return;

@@ -29,6 +29,12 @@ public final class PlayerData {
     /** ImproBable 跨检测融合桶（Phase 10，P2-9）：亚阈值小违规按类别喂票。 */
     public final ImprobableTracker improbable = new ImprobableTracker();
     public final Queue<Long> attackTimes = new ConcurrentLinkedQueue<Long>();
+    /**
+     * FastClick 独立的攻击时刻队列。不能复用 attackTimes：KillAuraCheck.checkCps
+     * 也在 onAttack 派发链中向 attackTimes 写入本次攻击时间戳（cps 默认开），
+     * 双写会让 burst 计数翻倍（实际 N 次攻击数出 2N），FastClick burst 误判。
+     */
+    public final Queue<Long> fastClickTimes = new ConcurrentLinkedQueue<Long>();
     public final Queue<Long> placeTimes = new ConcurrentLinkedQueue<Long>();
     public final PlacePoints placePoints = new PlacePoints();
     public final Map<String, Double> buffers = new HashMap<String, Double>();
@@ -93,6 +99,8 @@ public final class PlayerData {
     public volatile int kbHLowTicks;
     public volatile int kbHPartialTicks;
     public volatile int kbPreciseTicks;
+    /** 击退中等削减连续计数（ratio ∈ [mid-reduce-min, precise-band-min) 检测带）。 */
+    public volatile int kbMidReduceTicks;
     public volatile double kbPreSpeed;
     public volatile long lastSprintStartTime;
     public volatile long lastSprintStopTime;
@@ -149,6 +157,12 @@ public final class PlayerData {
     /** 脚下/脚所在方块是台阶或楼梯（允许 ≤0.6 的自动步进垂直位移）。 */
     public volatile boolean blockOnStairsOrSlab;
 
+    /**
+     * 碰撞重演体素快照（主线程快照周期采集，包线程只读）。
+     * null = 不可用（模拟关闭/未初始化），检测回退旧（墙距+豁免）路径。
+     */
+    public volatile com.ycbr.anticheat.simulation.VoxelGrid voxelGrid;
+
     /** 脚下/脚所在方块是活塞臂实体（PISTON_MOVING_PIECE）：位移由活塞外部驱动。 */
     public volatile boolean blockOnPiston;
 
@@ -195,6 +209,18 @@ public final class PlayerData {
     public volatile long lastBowFlagTime;
     public volatile long lastFastClickFlagTime;
 
+    // ---- FastClick 独立攻击间隔基准 ----
+    // 不能复用 data.lastAttackTime：KillAuraCheck 在 onAttack 派发链中先执行并把它
+    // 更新为"本次攻击"时间戳，FastClickCheck 后执行读到的间隔恒为 ~0ms（样本污染 →
+    // 机械判定对任何点击者必然命中）。用独立字段记录本检测自己的上次攻击时刻。
+    public volatile long lastFastClickAttackTime;
+
+    // ---- AutoBlock（attack while digging）连续计数 ----
+    /** 连续"攻击时仍在挖掘"次数（间隔 &lt; streak-gap-ms 才累计）。 */
+    public volatile int autoBlockStreak;
+    /** 最近一次 AutoBlock 判定时刻（ms）。 */
+    public volatile long lastAutoBlockAttackTime;
+
     /** 每玩家事务往返追踪器（见 TransactionTracker）。由 {@link #transaction(AntiCheatManager)} 懒初始化。 */
     public volatile TransactionTracker transaction;
 
@@ -222,6 +248,11 @@ public final class PlayerData {
     // ---- 惩罚框架（Phase 0.4）----
     /** 攻击阻断截止时间（ms），此前 onAttack 不派发到检测。 */
     public volatile long attackBlockedUntil;
+    /**
+     * 硬检测突发取消截止时间（ms）：MultiInteract 命中后在此窗口内，
+     * 监听线程会直接取消后续攻击包（Grim cancelBuffer 语义）。
+     */
+    public volatile long hardCancelUntil;
     /** 交叉信号集合（多检测协同投票，如 killaura+reach+aim 同时命中）。 */
     public final java.util.Set<String> crossSignals =
             java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());

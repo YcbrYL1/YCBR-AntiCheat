@@ -35,7 +35,7 @@ public final class FastClickLogic {
 
     /** 机械模式判定：间隔高度规律（负峰度）或熵极低。 */
     public boolean mechanicalPattern() {
-        return mechanicalPattern(-1.0D);
+        return mechanicalPattern(-1.5D);
     }
 
     /**
@@ -44,12 +44,31 @@ public final class FastClickLogic {
      * @param kurtosisMax 峰度上限（低于即机械心跳）
      */
     public boolean mechanicalPattern(double kurtosisMax) {
+        return mechanicalPattern(kurtosisMax, 120.0D);
+    }
+
+    /**
+     * 机械模式判定（阈值可配）。
+     *
+     * <p>【误判修复】原判定只看峰度/熵，任何"恒定节奏"（含挖矿时被挖掘周期驱动的
+     * 慢速还击、稳定手点）都会命中。点击宏的区分特征不止"恒定"，还有"高速"——
+     * 加 {@code maxMeanIntervalMs} 高速前置：平均间隔超过阈值（默认 120ms，即 &gt;8.3cps）
+     * 一律视为非点击宏（挖矿/拆包等慢速恒定节奏被排除）。</p>
+     *
+     * @param kurtosisMax       峰度上限（低于即机械心跳）
+     * @param maxMeanIntervalMs 平均间隔上限（ms），超过则不算高速点击宏
+     */
+    public boolean mechanicalPattern(double kurtosisMax, double maxMeanIntervalMs) {
         if (intervals.size() < MIN_SAMPLES) {
             return false;
         }
         List<Double> xs = new ArrayList<Double>(intervals.size());
         for (long v : intervals) {
             xs.add((double) v);
+        }
+        double mean = Statistics.average(xs);
+        if (mean > maxMeanIntervalMs) {
+            return false; // 慢速恒定节奏（挖矿还击/拆包）不是点击宏
         }
         double kurt = Statistics.kurtosis(xs);
         double entropy = Statistics.shannonEntropy(xs);

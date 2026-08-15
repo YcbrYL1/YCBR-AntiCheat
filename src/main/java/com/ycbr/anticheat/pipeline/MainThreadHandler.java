@@ -19,6 +19,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import com.ycbr.anticheat.simulation.PhysicsConstants;
+import com.ycbr.anticheat.simulation.VoxelGrid;
 import com.ycbr.anticheat.simulation.WorldProbe;
 import com.ycbr.anticheat.check.CheckType;
 import com.ycbr.anticheat.core.AntiCheatManager;
@@ -288,6 +289,59 @@ public final class MainThreadHandler implements Runnable {
         data.wallFwdDist = wallDistance(player, px, py, pz, yaw, 0.0);
         data.wallLeftDist = wallDistance(player, px, py, pz, yaw, -90.0);
         data.wallRightDist = wallDistance(player, px, py, pz, yaw, 90.0);
+        snapshotVoxelGrid(player, data, px, py, pz);
+    }
+
+    /**
+     * 采集碰撞重演体素网格（P1 碰撞重演）：以脚底格为原点，XZ ±{@link VoxelGrid#RANGE_XZ}、
+     * Y 下 {@link VoxelGrid#RANGE_Y_BELOW}/上 {@link VoxelGrid#RANGE_Y_ABOVE}，
+     * 逐格写 SOLID/STEP/SLIME/LIQUID/WEB/LADDER/PISTON 标志。
+     * 主线程调用；包线程只读该快照（volatile 引用替换）。
+     */
+    private void snapshotVoxelGrid(Player player, PlayerData data, double px, double py, double pz) {
+        int ox = (int) Math.floor(px);
+        int oy = (int) Math.floor(py);
+        int oz = (int) Math.floor(pz);
+        VoxelGrid grid = new VoxelGrid(ox, oy, oz, System.currentTimeMillis());
+        for (int by = oy - VoxelGrid.RANGE_Y_BELOW; by <= oy + VoxelGrid.RANGE_Y_ABOVE; by++) {
+            for (int bz = oz - VoxelGrid.RANGE_XZ; bz <= oz + VoxelGrid.RANGE_XZ; bz++) {
+                for (int bx = ox - VoxelGrid.RANGE_XZ; bx <= ox + VoxelGrid.RANGE_XZ; bx++) {
+                    int flags = flagsForMaterial(player.getWorld().getBlockAt(bx, by, bz).getType());
+                    if (flags != 0) {
+                        grid.setFlag(bx, by, bz, flags);
+                    }
+                }
+            }
+        }
+        data.voxelGrid = grid;
+    }
+
+    private int flagsForMaterial(Material m) {
+        if (m == null) {
+            return 0;
+        }
+        if (WorldProbe.isStepMaterial(m)) {
+            return VoxelGrid.STEP;
+        }
+        if (m == Material.SLIME_BLOCK) {
+            return VoxelGrid.SLIME;
+        }
+        if (liquid(m)) {
+            return VoxelGrid.LIQUID;
+        }
+        if (m == Material.WEB) {
+            return VoxelGrid.WEB;
+        }
+        if (m == Material.LADDER || m == Material.VINE) {
+            return VoxelGrid.LADDER;
+        }
+        if (m == Material.PISTON_MOVING_PIECE) {
+            return VoxelGrid.PISTON;
+        }
+        if (m.isSolid()) {
+            return VoxelGrid.SOLID;
+        }
+        return 0;
     }
 
     /**
@@ -360,7 +414,12 @@ public final class MainThreadHandler implements Runnable {
             return;
         }
 
-        int kickAt = cfg.i("checks." + verdict.type.getConfigPath() + ".kick-at-vl", 20);
+        // 子级 kick-at-vl（惩罚精细化）：checks.<type>.<sub>.kick-at-vl 覆盖 type 级。
+        // 例如硬检测子项（selfinteract）可配低阈值快速清场，启发式子项可配高阈值宽容。
+        String baseKey = "checks." + verdict.type.getConfigPath();
+        String subKey = verdict.sub == null ? "" : verdict.sub.toLowerCase();
+        int kickAt = cfg.i(baseKey + "." + subKey + ".kick-at-vl",
+                cfg.i(baseKey + ".kick-at-vl", 20));
         if (vl >= kickAt) {
             data.resetViolations(verdict.type);
             if (data.op) {

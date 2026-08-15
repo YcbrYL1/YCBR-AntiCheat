@@ -384,6 +384,132 @@ public final class PredictionEngine {
     }
 
     // ------------------------------------------------------------------
+    // candidatesWithCollision（真实碰撞重演：AABB 逐轴解析替代墙距/豁免）
+    // ------------------------------------------------------------------
+
+    /**
+     * 带体素网格的单 tick 候选生成（P1 碰撞重演路径）。
+     *
+     * <p>与 {@link #candidates} 的唯一差异：每个候选原始位移 (motX, motY, motZ) 在
+     * 移动前位置 (px,py,pz) 上经 {@link CollisionResolver#resolve} 做逐轴碰撞解析
+     * （面距截断 + 台阶步进 + 落地/撞顶 + 粘液落地标记），因此台阶/楼梯/墙/角/天花板
+     * 全部由世界几何决定，不再依赖 {@code stepVerticalAllowed}/{@code slimeBounceAllowed}
+     * 豁免清单与三方向墙距 hack。</p>
+     *
+     * <p>网格数据不足（越界/过期）→ 返回 {@code null}，调用方回退旧路径（墙距+豁免），
+     * 保证网格缺失时零误判。仅支持单 tick（ticks==1）；多 tick 场景继续走旧路径
+     * （累计误差已由 √ticks 容差吸收，中间 tick 逐格重演留作后续）。</p>
+     *
+     * @param px 移动前脚底 X（shadow 位置）
+     * @param py 移动前脚底 Y
+     * @param pz 移动前脚底 Z
+     */
+    public static Candidate[] candidatesWithCollision(
+            double motionX, double motionY, double motionZ, boolean onGround, float yaw,
+            double frictionFactor, boolean sprinting, double speedLevel, double jumpLevel,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
+            boolean usingItem, double px, double py, double pz, VoxelGrid grid) {
+
+        List<Candidate> list = new ArrayList<Candidate>();
+        double[] speedFactors = {0.0, 1.0, SPRINT_MODIFIER, SNEAK_FACTOR};
+        String[] speedLabels = {"idle", "walk", "sprint", "sneak"};
+        boolean[] jumpFlags = {false, true};
+        double[] strafes = {0.0, -1.0, 1.0};
+
+        for (int s = 0; s < speedFactors.length; s++) {
+            for (int j = 0; j < jumpFlags.length; j++) {
+                boolean jump = jumpFlags[j] && onGround;
+                boolean sprintRow = speedFactors[s] == SPRINT_MODIFIER;
+                double factor = speedFactors[s];
+
+                double hFriction = onGround ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+                if (inLiquid) {
+                    hFriction = LIQUID_DRAG;
+                }
+                double baseMotX = motionX * hFriction;
+                double baseMotZ = motionZ * hFriction;
+                double baseMotY = motionY;
+
+                if (jump && !inLiquid && !onLadder && !inWeb) {
+                    baseMotY = JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
+                    if (headBlocked) {
+                        baseMotY = Math.min(baseMotY, HEAD_BLOCKED_JUMP_CAP);
+                    }
+                    if (sprintRow) {
+                        double rad = yaw * Math.PI / 180.0;
+                        baseMotX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
+                        baseMotZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
+                    }
+                }
+
+                double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
+                double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
+                        * (sprintRow ? SPRINT_MODIFIER : 1.0);
+                double inputSpeed;
+                if (inLiquid) {
+                    inputSpeed = baseSpeed * ((onGround && sprintRow) ? PhysicsConstants.LIQUID_GROUND_SPRINT_FACTOR : LIQUID_INPUT_FACTOR);
+                } else if (onGround) {
+                    inputSpeed = baseSpeed * f6;
+                } else {
+                    inputSpeed = AIR_ACCEL;
+                }
+                inputSpeed *= factor;
+                if (usingItem) {
+                    inputSpeed *= USING_ITEM_FACTOR;
+                }
+
+                for (int st = 0; st < strafes.length; st++) {
+                    double motX = baseMotX;
+                    double motZ = baseMotZ;
+                    double motY = baseMotY;
+                    double fwd = 1.0;
+                    double strafe = strafes[st];
+                    double f3 = Math.sqrt(fwd * fwd + strafe * strafe);
+                    if (f3 < 1e-4) {
+                        continue;
+                    }
+                    if (f3 < 1.0) {
+                        f3 = 1.0;
+                    }
+                    f3 = inputSpeed / f3;
+                    double sinYaw = Math.sin(yaw * Math.PI / 180.0);
+                    double cosYaw = Math.cos(yaw * Math.PI / 180.0);
+                    motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
+                    motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
+
+                    if (inWeb) {
+                        motX *= WEB_DAMP;
+                        motY *= WEB_DAMP;
+                        motZ *= WEB_DAMP;
+                    }
+
+                    if (onLadder) {
+                        motY = LADDER_CLIMB;
+                    } else if (!jump) {
+                        if (onGround) {
+                            motY = 0.0;
+                        } else if (inLiquid && jumpFlags[j]) {
+                            motY += LIQUID_SWIM_UP;
+                        }
+                    }
+
+                    CollisionResolver.Resolution res = CollisionResolver.resolve(
+                            px, py, pz, motX, motY, motZ, grid);
+                    if (res == null) {
+                        return null; // 网格不足以解析 → 整路径回退旧逻辑
+                    }
+                    // 粘液落地：引擎无弹跳模型，落地 tick 仍按面距解析；
+                    // 反弹 tick 的垂直包络由调用方（slimeBounceAllowed）兜底。
+                    list.add(new Candidate(res.dx, res.dz, res.dy,
+                            speedLabels[s] + (jump ? "+jump" : "") + "+strafe=" + (int) strafes[st]
+                                    + (res.stepped ? "+step" : "")));
+                }
+            }
+        }
+        return list.toArray(new Candidate[0]);
+    }
+
+    // ------------------------------------------------------------------
     // candidatesMultiTick 重载（高 ping：一个包覆盖多个服务器 tick）
     // ------------------------------------------------------------------
 

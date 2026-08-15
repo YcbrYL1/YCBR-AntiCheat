@@ -17,11 +17,16 @@ class ItemUseLogicTest {
     }
 
     @Test
-    void bow_potion_milk_fishingRod_triggerItemUse() {
+    void bow_potion_milk_triggerItemUse() {
         assertTrue(ItemUseLogic.isUseItem(Material.BOW));
         assertTrue(ItemUseLogic.isUseItem(Material.POTION));
         assertTrue(ItemUseLogic.isUseItem(Material.MILK_BUCKET));
-        assertTrue(ItemUseLogic.isUseItem(Material.FISHING_ROD));
+    }
+
+    @Test
+    void fishingRod_doesNotTriggerItemUse() {
+        // 1.8 鱼竿 getItemUseAction=NONE：不进入使用/减速状态，钓鱼疾跑合法
+        assertFalse(ItemUseLogic.isUseItem(Material.FISHING_ROD));
     }
 
     @Test

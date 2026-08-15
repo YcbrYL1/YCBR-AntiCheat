@@ -27,28 +27,35 @@ public final class KillAuraCheck extends Check {
      * 这些子检测判定"瞄准模式"，对统计信号敏感；其余子检测
      * （selfinteract/autoblock/noswing/post/multiinteract/cps/reach/throughwalls 等）
      * 与瞄准模式无关，保持直判，避免引入假阴性。
+     *
+     * 注：AimModulo360 已升级为"硬检测"（>320° 单次大转角即直判，
+     * 对齐 Grim AimModulo360），不再受统计层门控。
      */
     private static final Set<String> AIM_GATED_SUBS = new java.util.HashSet<String>(
-            java.util.Arrays.asList("AimModulo360", "AimStep", "GcdStable", "GcdGrid",
+            java.util.Arrays.asList("AimStep", "GcdStable", "GcdGrid",
                     "ConstStep", "AxisAsym", "BigRot", "Angle", "Switch"));
 
     /**
-     * 统计层交叉门：aimstat 未启用/未收集满样本 → 维持原判（不降级）；
-     * 启用后要求 aim-stat 信号命中且新鲜，否则只记启发式信号不 punish。
+     * 统计层交叉门：委托 {@link AimGating}（纯逻辑）。
+     * <ul>
+     *   <li>非门控子检测：直判；</li>
+     *   <li>{@code heuristic-soft} 开启：aimstat 交叉命中且新鲜才 punish，否则只投启发式信号
+     *       （冷启动同样软降级，彻底消除"aimstat 未就绪时的直判误杀"）；</li>
+     *   <li>默认（soft 关）：兼容旧行为——aimstat 关闭或未开交叉时直判。</li>
+     * </ul>
      */
     private boolean shouldPunish(PlayerData data, String sub) {
-        if (!AIM_GATED_SUBS.contains(sub)) {
-            return true;
-        }
-        if (!cfg.enabled("aimstat") || !cfg.raw().getBoolean("checks.killaura.aimstat-cross", true)) {
-            return true;
-        }
-        if (data.statSampleCount < com.ycbr.anticheat.check.combat.aim.AimStatsLogic.MIN_SAMPLES) {
-            return true; // 冷启动：统计层尚无判断力
-        }
+        boolean gated = AIM_GATED_SUBS.contains(sub);
+        boolean soft = cfg.raw().getBoolean("checks.killaura.heuristic-soft", false);
+        boolean aimstatEnabled = cfg.enabled("aimstat");
+        boolean crossEnabled = cfg.raw().getBoolean("checks.killaura.aimstat-cross", true);
+        boolean samplesReady = data.statSampleCount
+                >= com.ycbr.anticheat.check.combat.aim.AimStatsLogic.MIN_SAMPLES;
+        boolean signalHit = signalCount(data, "aim-stat") >= 1;
         boolean fresh = System.currentTimeMillis() - data.aimStatSignalTime
                 < cfg.i("checks.aimstat.signal-fresh-ms", 10000);
-        return signalCount(data, "aim-stat") >= 1 && fresh;
+        return AimGating.shouldPunish(sub, gated, soft, aimstatEnabled, crossEnabled,
+                samplesReady, signalHit, fresh);
     }
 
     /** 启发式 flag 出口：未通过交叉门时只投启发式信号，不 punish。 */
@@ -58,6 +65,27 @@ public final class KillAuraCheck extends Check {
         } else {
             addSignal(data, "heur-" + sub);
         }
+    }
+
+    /**
+     * 硬检测预检（纯逻辑，监听线程安全调用，供 {@link com.ycbr.anticheat.check.CheckRegistry} 使用）：
+     * <ul>
+     *   <li>突发取消窗口内（MultiInteract 命中后）：取消任何攻击包；</li>
+     *   <li>攻击自己（SelfInteract）：取消攻击包并进入硬惩罚。</li>
+     * </ul>
+     */
+    public static boolean shouldHardCancel(PlayerData data, int targetId, int playerEntityId,
+            boolean selfInteractEnabled, boolean hardCancelSelf) {
+        if (data.op || data.creative) {
+            return false;
+        }
+        if (data.hardCancelUntil > System.currentTimeMillis()) {
+            return true;
+        }
+        if (targetId != playerEntityId) {
+            return false;
+        }
+        return selfInteractEnabled && hardCancelSelf;
     }
 
     public KillAuraCheck(AntiCheatManager manager) {
@@ -145,15 +173,27 @@ public final class KillAuraCheck extends Check {
             data.hasPrevRotation = true;
             return;
         }
-        double rawDelta = MathUtil.normalizeYaw(ctx.yaw - data.prevYaw);
+        // 复用上方 else 分支已写入的 lastYawDelta（= normalizeYaw(ctx.yaw - prevYaw)）
+        double rawDelta = data.lastYawDelta;
         if (isSubEnabled("modulo360") && data.ping <= i("modulo360.max-ping", 150)
-                && now - data.lastAttackTime <= 3500L
-                && Math.abs(rawDelta) > 170D && Math.abs(data.lastYawDelta) < 30D) {
-            if (++data.modulo360Streak >= si("modulo360.min-streak", 2, 1)) {
+                && now - data.lastAttackTime <= 3500L) {
+            double rawAbs = Math.abs(rawDelta);
+            boolean hardSnap = rawAbs > 320D && Math.abs(data.lastYawDelta) < 30D;
+            if (hardSnap) {
+                // 硬检测：单次 >320° 瞬移（上一帧 <30°），真人不可能完成 → 直接 punish（不依赖统计门控）
                 data.modulo360Streak = 0;
                 if (bump(data, "modulo360", 1D, i("modulo360.vl-before-flag", 2))) {
-                    flagGated(data, "AimModulo360", "yaw snap " + MathUtil.round(rawDelta, 1));
+                    flag(data, "AimModulo360", "hard yaw snap " + MathUtil.round(rawDelta, 1));
                 }
+            } else if (rawAbs > 170D && Math.abs(data.lastYawDelta) < 30D) {
+                if (++data.modulo360Streak >= si("modulo360.min-streak", 2, 1)) {
+                    data.modulo360Streak = 0;
+                    if (bump(data, "modulo360", 1D, i("modulo360.vl-before-flag", 2))) {
+                        flag(data, "AimModulo360", "yaw snap " + MathUtil.round(rawDelta, 1));
+                    }
+                }
+            } else {
+                data.modulo360Streak = 0;
             }
         } else {
             data.modulo360Streak = 0;
@@ -297,9 +337,12 @@ public final class KillAuraCheck extends Check {
         }
         PlayerData data = ctx.data;
         if (ctx.targetId == ctx.playerEntityId) {
+            // 兜底路径：监听线程已取消的（硬检测）不走到这里；走到这里说明
+            // 硬取消关闭 → 仍做 VL 惩罚 + 软阻断，避免完全漏过自击。
             if (isSubEnabled("selfinteract")
                     && bump(data, "selfinteract", 1D, i("selfinteract.vl-before-flag", 1))) {
                 flag(data, "SelfInteract", "attacked self");
+                blockAttacks(data, selfInteractBlockMs());
             }
             return;
         }
@@ -348,6 +391,23 @@ public final class KillAuraCheck extends Check {
         checkInterval(data);
     }
 
+    /**
+     * 硬检测入口（在 actor 线程执行，由监听线程预检命中后调度）：
+     * 攻击自己（KA 经典痕迹，客户端正常情况不可能发生）→ 即时 flag + 攻击阻断。
+     * 与 Grim SelfInteract 的"命中即取消+封禁"对齐。
+     */
+    public void onSelfInteractHard(PlayerData data) {
+        if (bump(data, "selfinteract", 1D, i("selfinteract.vl-before-flag", 1))) {
+            flag(data, "SelfInteract", "attacked self (hard-cancel)");
+        }
+        blockAttacks(data, selfInteractBlockMs());
+    }
+
+    private long selfInteractBlockMs() {
+        return Math.max(0L, manager.config().raw().getLong(
+                "checks.killaura.selfinteract.hard-block-ms", 500L));
+    }
+
     private void checkAutoBlock(PlayerData data, long now) {
         if (!isSubEnabled("autoblock")) {
             return;
@@ -358,11 +418,34 @@ public final class KillAuraCheck extends Check {
         if (!data.digging) {
             return;
         }
-        if (now - data.lastDigStartTime < i("autoblock.dig-exempt-ms", 200)) {
+        // 【语义修正】AutoBlock 作弊指纹是"攻击触发的挖掘"：挖掘刚启动（<mine-exempt-ms）
+        // 就发生攻击。而"挖掘持续超过 mine-exempt-ms 后的攻击"= 挖矿中反击 / 左键挖右键打，
+        // 是 1.8 完全合法的操作 → 豁免。旧逻辑用 dig-exempt 豁免挖掘早期、误判挖矿反击，
+        // 恰好把作弊特征豁免、把合法操作判了——已反转。
+        if (now - data.lastDigStartTime > i("autoblock.mine-exempt-ms", 300)) {
+            data.autoBlockStreak = 0;
             return;
         }
-        if (bump(data, "autoblock", 1D, i("autoblock.vl-before-flag", 1))) {
-            flag(data, "AutoBlock", "attack while digging");
+        // 受击豁免：挖矿被攻击→松手→digging 复位有 1 tick 延迟，此时还击会被误判。
+        // 收到击退后 hit-exempt-ms 内不判（1.8 PvP 受击必有 KB）。
+        if (now - data.lastKbTime < si("autoblock.hit-exempt-ms", 800, 600)) {
+            data.autoBlockStreak = 0;
+            return;
+        }
+        // 连续高速连击才 flag：streak-gap-ms 收紧到 150ms（>6.7cps），正常攻击速度
+        // （<10cps）会让 streak 断开；挖掘早期单次攻击（如挖矿瞬间被打）也不判。
+        if (now - data.lastAutoBlockAttackTime <= si("autoblock.streak-gap-ms", 150, 120)) {
+            data.autoBlockStreak++;
+        } else {
+            data.autoBlockStreak = 1;
+        }
+        data.lastAutoBlockAttackTime = now;
+        if (data.autoBlockStreak < si("autoblock.streak", 3, 2)) {
+            drain(data, "autoblock", 0.1D);
+            return;
+        }
+        if (bump(data, "autoblock", 1D, i("autoblock.vl-before-flag", 2))) {
+            flag(data, "AutoBlock", "attack right after dig start x" + data.autoBlockStreak);
         }
     }
 
@@ -495,6 +578,13 @@ public final class KillAuraCheck extends Check {
                 && data.positionCount == data.lastAttackPositionCount) {
             if (bump(data, "multiinteract", 1D, i("multiinteract.vl-before-flag", 2))) {
                 flag(data, "MultiInteract", "two targets without position packet");
+                // 硬检测：命中后开突发取消窗口（Grim cancelBuffer 语义）——
+                // 监听线程会直接取消窗口内到达的后续攻击包，终止连点多目标。
+                long burstMs = Math.max(0L, i("multiinteract.burst-cancel-ms", 400));
+                if (burstMs > 0L) {
+                    data.hardCancelUntil = Math.max(data.hardCancelUntil,
+                            System.currentTimeMillis() + burstMs);
+                }
             }
         } else {
             drain(data, "multiinteract", 0.1D);
