@@ -372,6 +372,7 @@ public final class GuiManager implements Listener {
             List<String> lore = new ArrayList<String>();
             lore.add(C_INFO + "\u5ef6\u8fdf\uff1a" + pingColor(ps.ping));
             lore.add(C_INFO + "\u8fde\u70b9\uff1a" + C_VAL + ps.attackSize);
+            lore.add(C_INFO + "timeTest\uff1a" + (ps.timeTest >= 50 ? C_OFF : C_VAL) + ps.timeTest);
             lore.add(C_INFO + "\u8fdd\u89c4\uff1a" + violationColor(ps.totalVl));
             if (ps.lastFlagDisplay != null) {
                 lore.add(C_INFO + "\u6700\u8fd1\uff1a" + C_VAL + ps.lastFlagDisplay);
@@ -476,6 +477,8 @@ public final class GuiManager implements Listener {
                 long ago = (System.currentTimeMillis() - last) / 1000L;
                 lore.add(C_INFO + "\u6700\u8fd1\u89e6\u53d1\uff1a" + C_VAL + ago + "s\u524d");
             }
+            lore.add("");
+            lore.add(C_DIM + "\u5de6\u952e\u8fdb\u5165\u5b50\u68c0\u6d4b\uff0cShift+\u5de6\u952e\u6253\u5f00\u8bbe\u7f6e");
             meta.setLore(lore);
             item.setItemMeta(meta);
             inv.setItem(18 + i, item);
@@ -612,7 +615,7 @@ public final class GuiManager implements Listener {
             state.target = prev.target;
         }
         state.page = Page.CHECK_SUBS;
-        state.from = Page.CHECKS;
+        state.from = prev != null && prev.page == Page.DETAIL ? Page.DETAIL : Page.CHECKS;
         state.type = type;
         states.put(viewer.getUniqueId(), state);
         viewer.openInventory(inv);
@@ -670,7 +673,7 @@ public final class GuiManager implements Listener {
             state.target = prev.target;
         }
         state.page = Page.CHECK_SETTINGS;
-        state.from = Page.CHECKS;
+        state.from = prev != null && prev.page == Page.DETAIL ? Page.DETAIL : Page.CHECKS;
         state.type = type;
         states.put(viewer.getUniqueId(), state);
         viewer.openInventory(inv);
@@ -692,7 +695,7 @@ public final class GuiManager implements Listener {
                 continue;
             }
             String line = logs.get(index);
-            inv.setItem(18 + k, named(Material.PAPER, C_INFO + line));
+            inv.setItem(18 + k, named(Material.PAPER, logColor(line) + line));
         }
         inv.setItem(46, named(Material.PAPER, C_VAL + "\u7b2c" + (pageIdx + 1) + "/" + totalPages
                 + "\u9875"));
@@ -1088,6 +1091,15 @@ public final class GuiManager implements Listener {
                 }
                 if (slot == 48) {
                     confirmOrKick(viewer, state);
+                    return;
+                }
+                if (slot >= 18 && slot < 18 + CheckType.values().length) {
+                    CheckType type = CheckType.values()[slot - 18];
+                    if (shift || subsOf(type).isEmpty()) {
+                        openCheckSettings(viewer, type);
+                    } else {
+                        openCheckSubs(viewer, type);
+                    }
                     return;
                 }
                 return;
@@ -1531,6 +1543,23 @@ public final class GuiManager implements Listener {
 
     private java.util.List<String> subsOf(CheckType type) {
         return cfg.subs(type.getConfigPath());
+    }
+
+    /** 日志行按检测类别着色：战斗=红、移动=黄、协议=水蓝；未识别保持灰。 */
+    private static ChatColor logColor(String line) {
+        for (CheckType type : CheckType.values()) {
+            if (line.contains(type.getDisplay())) {
+                ImprobableTracker.Category cat = ImprobableTracker.categoryOf(type);
+                if (cat == ImprobableTracker.Category.COMBAT) {
+                    return ChatColor.RED;
+                }
+                if (cat == ImprobableTracker.Category.MOVEMENT) {
+                    return ChatColor.YELLOW;
+                }
+                return ChatColor.AQUA;
+            }
+        }
+        return C_INFO;
     }
 
     private long totalViolations(PlayerData data) {
