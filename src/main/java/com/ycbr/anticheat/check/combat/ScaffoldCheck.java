@@ -19,6 +19,17 @@ public final class ScaffoldCheck extends Check {
             return;
         }
         PlayerData data = ctx.data;
+        // 搭路活跃无条件维护（供 sim-speed/sim-fly 放方块豁免）：短窗口内连续放置
+        // = 搭路指纹。搭路玩家在刚放下的方块上走/跳，sim 引擎无此模型 → 完全豁免。
+        // 配置统一放 checks.simulation.bridge-window-ms（SimulationCheck 同源读取）。
+        long bridgeWindow = cfg.i("checks.simulation.bridge-window-ms", 150);
+        if (data.lastBridgePlaceTime > 0L
+                && ctx.time - data.lastBridgePlaceTime <= bridgeWindow) {
+            data.bridgePlaceStreak++;
+        } else {
+            data.bridgePlaceStreak = 1;
+        }
+        data.lastBridgePlaceTime = ctx.time;
         if (data.inVehicle || data.ping > cfg.maxPing()) {
             return;
         }

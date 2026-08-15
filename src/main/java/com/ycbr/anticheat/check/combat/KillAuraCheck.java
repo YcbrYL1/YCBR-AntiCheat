@@ -361,6 +361,7 @@ public final class KillAuraCheck extends Check {
         if (target != null) {
             checkReach(ctx, target);
             checkThroughWalls(ctx, target);
+            checkHitboxes(ctx, target);
         }
         long now2 = System.currentTimeMillis();
         long prevGap = data.lastAttackTime > 0L ? now2 - data.lastAttackTime : Long.MAX_VALUE;
@@ -889,6 +890,127 @@ public final class KillAuraCheck extends Check {
                 flag(data, "ThroughWalls", "hit through block at " + MathUtil.round(blockedAt, 1) + "m");
             }
         }
+    }
+
+    /**
+     * P1-2 硬判 Hitboxes（对齐 Grim Hitboxes）：攻击命中，但攻击者视角射线在
+     * 目标碰撞箱（多帧位置 + ping 膨胀）外 → 不可能的命中。
+     *
+     * <p>与 Angle（软门控、turn 豁免、延迟到旋转包判）互补：本检测在攻击时刻
+     * 即时判定、无转向豁免、目标位置枚举当前帧与上一帧（速度回推），命中任一
+     * 合法。多部件实体（龙/凋灵等，exempt-entity-types）单 AABB 模型不可靠 → 豁免。</p>
+     */
+    private void checkHitboxes(AttackContext ctx, EntitySnapshot target) {
+        if (!isSubEnabled("hitboxes")) {
+            return;
+        }
+        if (target.entityType != null && exemptReachType(target.entityType)) {
+            return;
+        }
+        PlayerData data = ctx.data;
+        if (!data.hasRotation) {
+            return;
+        }
+        if (System.currentTimeMillis() - target.createdMillis
+                > i("hitboxes.max-snapshot-age-ms", 500)) {
+            return; // 快照过期：目标位置不可信
+        }
+        double pingSum = data.ping;
+        if (target.uuid != null) {
+            PlayerData targetData = manager.getDataManager().get(target.uuid);
+            if (targetData != null && targetData.movement.initialized) {
+                target = new EntitySnapshot(target.id, target.uuid, target.entityType,
+                        targetData.movement.lastX, targetData.movement.lastY, targetData.movement.lastZ,
+                        target.width, target.height, System.currentTimeMillis(), 0D, 0D, 0D);
+                pingSum += targetData.ping;
+            }
+        }
+        double expand = sd("hitboxes.expand", 0.1D, 0.05D)
+                + pingSum * sd("hitboxes.ping-expand", 0.002D, 0.001D);
+        double halfW = target.width / 2D;
+        double halfH = target.height / 2D;
+        float yaw = (float) data.lastYaw;
+        float pitch = (float) data.lastPitch;
+        // 目标多帧：当前快照 + 速度回推一 tick（攻击包可能对应上一帧目标位置）
+        double[][] frames = new double[][] {
+                { target.x, target.y, target.z },
+                { target.x - target.vx, target.y - target.vy, target.z - target.vz } };
+        for (double[] f : frames) {
+            double cy = f[1] + target.height / 2D;
+            for (double eye : new double[] { EYE_STANDING, EYE_SNEAKING }) {
+                if (MathUtil.rayIntersectsAabb(data.movement.lastX, data.movement.lastY + eye,
+                        data.movement.lastZ, yaw, pitch,
+                        f[0] - halfW, cy - halfH, f[2] - halfW,
+                        f[0] + halfW, cy + halfH, f[2] + halfW, expand)) {
+                    drain(data, "hitboxes", 0.05D);
+                    return;
+                }
+            }
+        }
+        if (bump(data, "hitboxes", 1D, i("hitboxes.vl-before-flag", 4))) {
+            flag(data, "Hitboxes", "attack ray missed target hitbox expand="
+                    + MathUtil.round(expand, 2));
+        }
+    }
+
+    /**
+     * P1-1 硬检测 DupLook（对齐 Grim AimDuplicateLook）：纯 LOOK 包
+     * （PacketPlayInLook，无位置）的 yaw/pitch 与上一 LOOK 包完全相同。
+     *
+     * <p>原版 1.8 客户端仅在旋转变化时才发 LOOK 包（EntityPlayerSP.onUpdate 的
+     * lastReported 比较），float 完全相同不可能出现 → 旋转伪造特征
+     * （KillAura 固定视角连点 / rotation spoofer）。豁免：
+     * 载具（骑乘时每 tick 无条件发 LOOK 包）、传送确认窗口、创造/飞行、
+     * <b>攻击窗口外</b>（DupLook 是 KA 固定视角特征，无攻击时重复 LOOK 包无作弊
+     * 意义——放方块时客户端会发重复 LOOK 包）、<b>放置后豁免</b>（同上）。</p>
+     */
+    @Override
+    protected void onLookPacket(PlayerData data, float yaw, float pitch) {
+        if (!isEnabled() || !isSubEnabled("duplook")) {
+            data.dupLookHasPrev = false;
+            data.dupLookStreak = 0;
+            return;
+        }
+        if (data.creative || data.flying || data.dead || data.inVehicle
+                || data.ping > cfg.maxPing()) {
+            data.dupLookHasPrev = false;
+            data.dupLookStreak = 0;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - data.lastTeleportTime <= i("duplook.teleport-exempt-ms", 500)) {
+            data.dupLookHasPrev = false;
+            data.dupLookStreak = 0;
+            return;
+        }
+        // 攻击窗口：DupLook 是 KillAura 固定视角特征，只在攻击上下文附近有意义。
+        // 放方块/使用物品时客户端会发重复 LOOK 包（lastReportedYaw 重置强制重发），
+        // 无攻击时重复 LOOK 包无作弊意义 → 窗口外一律不判。
+        if (now - data.lastAttackTime > i("duplook.attack-window-ms", 3500)) {
+            data.dupLookHasPrev = false;
+            data.dupLookStreak = 0;
+            return;
+        }
+        // 放置豁免：放置方块后客户端发重复 LOOK 包（同上），放置动作刚发生即跳过。
+        if (now - data.lastPlaceTime < i("duplook.place-exempt-ms", 500)) {
+            data.dupLookHasPrev = false;
+            data.dupLookStreak = 0;
+            return;
+        }
+        if (data.dupLookHasPrev && yaw == data.dupLookYaw && pitch == data.dupLookPitch) {
+            if (++data.dupLookStreak >= i("duplook.min-streak", 1)) {
+                data.dupLookStreak = 0;
+                if (bump(data, "duplook", 1D, i("duplook.vl-before-flag", 2))) {
+                    flag(data, "DupLook", "identical look yaw=" + MathUtil.round(yaw, 3)
+                            + " pitch=" + MathUtil.round(pitch, 3));
+                }
+            }
+        } else {
+            data.dupLookStreak = 0;
+        }
+        data.dupLookYaw = yaw;
+        data.dupLookPitch = pitch;
+        data.dupLookHasPrev = true;
     }
 
     private void checkCps(AttackContext ctx) {

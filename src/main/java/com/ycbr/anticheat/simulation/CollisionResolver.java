@@ -268,14 +268,17 @@ public final class CollisionResolver {
                             if (f < 0) {
                                 return null;
                             }
-                            if ((f & (VoxelGrid.SOLID | VoxelGrid.STEP | VoxelGrid.SLIME)) == 0) {
+                            if ((f & (VoxelGrid.SOLID | VoxelGrid.STEP | VoxelGrid.SLIME
+                                    | VoxelGrid.SOUL)) == 0) {
                                 continue;
                             }
                             if (bx + 1 > x - PLAYER_HALF_WIDTH + EPS
                                     && bx < x + PLAYER_HALF_WIDTH - EPS
                                     && bz + 1 > z - PLAYER_HALF_WIDTH + EPS
                                     && bz < z + PLAYER_HALF_WIDTH - EPS) {
-                                double top = (f & VoxelGrid.STEP) != 0 ? 0.5 : 1.0;
+                                double top = (f & VoxelGrid.STEP) != 0 ? 0.5
+                                        : (f & VoxelGrid.SOUL) != 0
+                                                ? VoxelGrid.SOUL_SAND_HEIGHT : 1.0;
                                 double surface = by + top;
                                 double dist = surface - y;
                                 if (dist > 0.0) {
@@ -339,4 +342,55 @@ public final class CollisionResolver {
 
     /** 步进判定的垂直位移上限（允许轻微抬升即触发）。 */
     private static final double STEP_EPS_CMP = 0.05;
+
+    /** 支撑面判定深度：脚底下方该距离内的方块顶面视为接触（吸收浮点漂移）。 */
+    public static final double STAND_DEPTH = 0.001;
+
+    /**
+     * 脚底支撑检测：位置 (x,y,z) 的碰撞盒足迹（±{@link #PLAYER_HALF_WIDTH}）下方
+     * 是否存在支撑面（SOLID/STEP/SLIME 顶面位于脚底下方 {@link #STAND_DEPTH} 内）。
+     * 供多 tick 重演推进 onGround 状态：持续贴地行走保持地面物理（摩擦/加速度），
+     * 走出边缘转为空中（重力接管）。
+     *
+     * @return 支撑面 Y 坐标（无支撑 = -1）；足迹任何一格网格未知 = NaN（调用方应
+     *         保持原 onGround 状态，贴地过预测方向安全）
+     */
+    public static double standingSurface(double x, double y, double z, VoxelGrid grid) {
+        if (grid == null) {
+            return Double.NaN;
+        }
+        int bx0 = (int) Math.floor(x - PLAYER_HALF_WIDTH);
+        int bx1 = (int) Math.floor(x + PLAYER_HALF_WIDTH);
+        int bz0 = (int) Math.floor(z - PLAYER_HALF_WIDTH);
+        int bz1 = (int) Math.floor(z + PLAYER_HALF_WIDTH);
+        int byFloor = (int) Math.floor(y);
+        double best = Double.NaN;
+        boolean unknown = false;
+        for (int by = byFloor - 1; by <= byFloor && !unknown; by++) {
+            for (int bx = bx0; bx <= bx1 && !unknown; bx++) {
+                for (int bz = bz0; bz <= bz1 && !unknown; bz++) {
+                    double top = grid.topAt(bx, by, bz);
+                    if (top < 0) {
+                        unknown = true;
+                        break;
+                    }
+                    if (top <= 0) {
+                        continue;
+                    }
+                    if (bx + 1 > x - PLAYER_HALF_WIDTH + EPS
+                            && bx < x + PLAYER_HALF_WIDTH - EPS
+                            && bz + 1 > z - PLAYER_HALF_WIDTH + EPS
+                            && bz < z + PLAYER_HALF_WIDTH - EPS) {
+                        double surface = by + top;
+                        if (surface <= y + EPS && surface >= y - STAND_DEPTH) {
+                            if (Double.isNaN(best) || surface > best) {
+                                best = surface;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return unknown ? Double.NaN : (Double.isNaN(best) ? -1.0 : best);
+    }
 }

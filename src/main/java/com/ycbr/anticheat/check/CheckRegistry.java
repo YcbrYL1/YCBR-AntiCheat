@@ -16,6 +16,7 @@ import com.ycbr.anticheat.check.combat.aim.AimStatisticsCheck;
 import com.ycbr.anticheat.check.movement.FlyCheck;
 import com.ycbr.anticheat.check.movement.NoFallCheck;
 import com.ycbr.anticheat.check.movement.NoSlowCheck;
+import com.ycbr.anticheat.check.movement.PhaseCheck;
 import com.ycbr.anticheat.check.movement.SimulationCheck;
 import com.ycbr.anticheat.check.movement.SpeedCheck;
 import com.ycbr.anticheat.check.movement.VelocityCheck;
@@ -70,6 +71,7 @@ public final class CheckRegistry {
         add(new FastClickCheck(manager));
         add(new ReachCheck(manager));
         add(new SimulationCheck(manager));
+        add(new PhaseCheck(manager));
         add(aimStat);
         add(protocol);
         add(wrongTurn);
@@ -193,6 +195,16 @@ public final class CheckRegistry {
         }
         for (Check check : checks) {
             check.onLook(data, onGround);
+        }
+    }
+
+    /** 纯 LOOK 包到达（每个包触发，含 onGround=false；见 {@link Check#onLookPacket}）。 */
+    public void onLookPacket(PlayerData data, float yaw, float pitch) {
+        if (data.op) {
+            return;
+        }
+        for (Check check : checks) {
+            check.onLookPacket(data, yaw, pitch);
         }
     }
 

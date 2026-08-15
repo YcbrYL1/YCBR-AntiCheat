@@ -140,19 +140,52 @@ public final class AsyncPacketListener {
                     return;
                 }
                 PlayerData data = manager.getDataManager().get(event.getPlayer().getUniqueId());
+                // P2-4 载具排除：载具中发给玩家的 velocity 包是载具速度同步语义，
+                // 非击退——记账会污染 velocity.pending（下车后立刻误判）并给
+                // shadow 注入错误动量（injectVelocity 是累加语义）。
+                if (data.inVehicle) {
+                    return;
+                }
+                double vx = packet.getIntegers().read(1) / 8000D;
+                double vy = packet.getIntegers().read(2) / 8000D;
+                double vz = packet.getIntegers().read(3) / 8000D;
+                long now = System.currentTimeMillis();
+                long dedupWindow = manager.config().raw()
+                        .getLong("checks.velocity.dedup-window-ms", 50L);
+                double dedupEps = manager.config().raw()
+                        .getDouble("checks.velocity.dedup-vector-eps", 0.01D);
+                boolean sameTick = now - data.lastKbTime >= 0L && now - data.lastKbTime <= dedupWindow;
+                if (sameTick
+                        && Math.abs(vx - data.lastKbVx) < dedupEps
+                        && Math.abs(vy - data.lastKbVy) < dedupEps
+                        && Math.abs(vz - data.lastKbVz) < dedupEps) {
+                    // P2-4 冗余去重（Mojang 爆炸/连击场景同 tick 多发）：客户端 motion
+                    // 是 set 语义，重复包无叠加效果；不跳过会把 shadow 动量加两次
+                    // （预测偏大漏检）且 velocity.issue 重置 t（判定推迟）。
+                    return;
+                }
                 data.kbPreSpeed = data.movement.lastDistanceXZ;
-                data.lastKbTime = System.currentTimeMillis();
-                data.velocity.issue(packet.getIntegers().read(1) / 8000D, packet.getIntegers().read(2) / 8000D,
-                        packet.getIntegers().read(3) / 8000D);
-                data.shadow.injectVelocity(
-                        packet.getIntegers().read(1) / 8000D,
-                        packet.getIntegers().read(2) / 8000D,
-                        packet.getIntegers().read(3) / 8000D);
+                double injectVx = vx;
+                double injectVy = vy;
+                double injectVz = vz;
+                if (sameTick) {
+                    // 同 tick 不同向量的后续包：客户端 set 覆盖前包，shadow 累加语义
+                    // → 注入差值模拟 set（前包尚未被任何移动包消费）
+                    injectVx = vx - data.lastKbVx;
+                    injectVy = vy - data.lastKbVy;
+                    injectVz = vz - data.lastKbVz;
+                }
+                data.lastKbTime = now;
+                data.lastKbVx = vx;
+                data.lastKbVy = vy;
+                data.lastKbVz = vz;
+                data.velocity.issue(vx, vy, vz);
+                data.shadow.injectVelocity(injectVx, injectVy, injectVz);
                 if (manager.config().raw().getBoolean("settings.debug-velocity", false)) {
                     Bukkit.getConsoleSender().sendMessage("§8[YCBR-VEL] §7KB issued vx="
-                            + MathUtil.round(packet.getIntegers().read(1) / 8000D, 3) + " vy="
-                            + MathUtil.round(packet.getIntegers().read(2) / 8000D, 3) + " vz="
-                            + MathUtil.round(packet.getIntegers().read(3) / 8000D, 3)
+                            + MathUtil.round(vx, 3) + " vy="
+                            + MathUtil.round(vy, 3) + " vz="
+                            + MathUtil.round(vz, 3)
                             + " pre=" + MathUtil.round(data.kbPreSpeed, 3));
                 }
                 ((VelocityCheck) manager.getRegistry().get(CheckType.VELOCITY)).onKbIssued(data);
@@ -273,6 +306,8 @@ public final class AsyncPacketListener {
         data.actor.submit(() -> {
             data.lookOnGround = fOnGround;
             manager.getRegistry().onRotation(data, fYaw, fPitch);
+            // DupLook 硬检测入口：纯 LOOK 包流（原版 1.8 仅旋转变化才发）
+            manager.getRegistry().onLookPacket(data, fYaw, fPitch);
             data.lastYaw = fYaw;
             data.lastPitch = fPitch;
             data.hasRotation = true;
@@ -376,6 +411,8 @@ public final class AsyncPacketListener {
     private void handleUseEntity(PlayerData data, Player player, PacketContainer packet) {
         int targetId = packet.getIntegers().read(0);
         boolean attack = isAttack(packet);
+        // Blink 包序扩展（P2-3）：交互包活着 + 移动包断流 = 选择性囤包信号源
+        data.lastInteractMillis = System.currentTimeMillis();
         data.actor.submit(() -> {
             data.useEntityCount++;
             if (attack) {
@@ -447,6 +484,10 @@ public final class AsyncPacketListener {
         final double fCursorX = cursorX;
         final double fCursorY = cursorY;
         final double fCursorZ = cursorZ;
+        data.lastInteractMillis = System.currentTimeMillis();
+        // 放置时刻（DupLook/sim-fly 放置豁免）：1.8 客户端放置方块会发重复 LOOK 包
+        // 并产生微小垂直位移（方块与玩家碰撞微调）→ 放置后短暂豁免这两类检测
+        data.lastPlaceTime = System.currentTimeMillis();
         data.actor.submit(() -> {
             Material held = null;
             try {
@@ -479,6 +520,7 @@ public final class AsyncPacketListener {
         }
         final int status = dig[0];
         final int face = dig[1];
+        data.lastInteractMillis = System.currentTimeMillis();
         data.actor.submit(() -> {
             if (status == 0) {
                 data.digging = true;

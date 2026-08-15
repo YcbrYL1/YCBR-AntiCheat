@@ -38,6 +38,11 @@ public final class VoxelGrid {
     public static final int WEB = 16;
     public static final int LADDER = 32;
     public static final int PISTON = 64;
+    /** 灵魂沙：碰撞盒高 7/8（0.875），玩家站上去脚底沉入 0.125（1.8 实际行为）。 */
+    public static final int SOUL = 128;
+
+    /** 灵魂沙碰撞盒高度（相对格底）。 */
+    public static final double SOUL_SAND_HEIGHT = 0.875;
 
     /** 原点格坐标 = 采集时刻 floor(脚底位置)。 */
     public final int originX;
@@ -96,7 +101,8 @@ public final class VoxelGrid {
     }
 
     /**
-     * 格顶碰撞高度（相对格底，单位格）：SOLID/SLIME → 1.0；STEP → 0.5；其余 → 0.0。
+     * 格顶碰撞高度（相对格底，单位格）：SOLID/SLIME → 1.0；STEP → 0.5；
+     * SOUL → 0.875（灵魂沙 7/8 盒）；其余 → 0.0。
      *
      * @return 顶高；网格外返回 -1
      */
@@ -107,6 +113,9 @@ public final class VoxelGrid {
         }
         if ((f & (SOLID | SLIME)) != 0) {
             return 1.0;
+        }
+        if ((f & SOUL) != 0) {
+            return SOUL_SAND_HEIGHT;
         }
         if ((f & STEP) != 0) {
             return 0.5;

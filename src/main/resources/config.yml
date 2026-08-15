@@ -58,7 +58,8 @@ checks:
     # 瞄准启发式子检测（AimStep/Gcd/ConstStep/AxisAsym/BigRot/Angle/Switch）软降级：
     # false = 兼容旧行为（aimstat 关闭时直判）；true = 仅当 aimstat 交叉信号命中且新鲜
     # 才 punish，否则只投 heur-* 信号不封禁（消除 aimstat 未就绪时的直判误杀）。
-    heuristic-soft: false
+    # P1-3 默认 true：配合 aimstat.enabled=true，启发式只做信号、统计层交叉后才惩罚。
+    heuristic-soft: true
     reach:
       enabled: true
       max-distance: 3.05
@@ -130,6 +131,26 @@ checks:
       min-streak: 2
       max-ping: 150
       vl-before-flag: 2
+    # P1-1 硬检测：纯 LOOK 包（无位置）旋转与上一包完全相同。原版 1.8 仅在旋转
+    # 变化时才发 LOOK 包 → 完全相同 = 旋转伪造（KA 固定视角/rotation spoofer）。
+    # 豁免：载具（骑乘每 tick 无条件发 LOOK）、传送确认窗口、高 ping、
+    # 攻击窗口外（放方块/使用物品时客户端会发重复 LOOK 包，无攻击无作弊意义）、
+    # 放置后豁免（同上）。
+    duplook:
+      enabled: true
+      teleport-exempt-ms: 500
+      attack-window-ms: 3500
+      place-exempt-ms: 500
+      min-streak: 1
+      vl-before-flag: 2
+    # P1-2 硬判：攻击命中但攻击者视角射线在目标碰撞箱（多帧位置 + ping 膨胀）外。
+    # 与 angle（软门控）互补：攻击时刻即时判定、无转向豁免。
+    hitboxes:
+      enabled: true
+      expand: 0.1
+      ping-expand: 0.002
+      max-snapshot-age-ms: 500
+      vl-before-flag: 4
     cps:
       enabled: true
       max-cps: 20
@@ -231,8 +252,10 @@ checks:
     duprot:
       enabled: false
       vl-before-flag: 4
+  # @Deprecated 经验公式（P0-2）：已被 simulation 引擎取代，关闭避免双判叠加。
+  # 若需临时兜底可改回 true，但同一帧两处 flag 会放大 VL。
   speed:
-    enabled: true
+    enabled: false
     kick-at-vl: 25
     kick-message: "&cKicked for Speed"
     extreme:
@@ -261,6 +284,11 @@ checks:
     enabled: true
     kick-at-vl: 15
     kick-message: "&cKicked for Velocity"
+    # P2-4 冗余击退去重：Mojang 爆炸/连击场景同 tick 连发多个 ENTITY_VELOCITY。
+    # 同窗口内向量完全相同的重复包直接忽略（客户端 motion 是 set 语义）；
+    # 同窗口不同向量的后续包按差值注入 shadow（模拟 set 覆盖）。
+    dedup-window-ms: 50
+    dedup-vector-eps: 0.01
     arrival-window-ticks: 2
     horizontal:
       enabled: true
@@ -303,8 +331,20 @@ checks:
       window-ticks: 12
       streak: 2
       vl-before-flag: 3
+  # 预测引擎（P0-1 默认开启）：单/多 tick AABB 碰撞重演，网格缺失自动回退墙距路径。
+  # 开启后 speed/fly 已关闭（@Deprecated 启发式）；nofall 保留——其 onGround 谎报
+  # 与摔落伤害检测面不被引擎覆盖。
   simulation:
-    enabled: false
+    enabled: true
+    # 搭路豁免：最近放置 + 正在移动（边走边放）或短窗口内 ≥N 次连续放置（快速搭路）
+    # → sim-speed/sim-fly 完全豁免。搭路玩家在刚放下的方块上走/跳，水平碰撞微调 +
+    # 体素网格异步采集不匹配 + 垂直位移大，单次放置豁免（限小位移）不适用。
+    # 搭路是 1.8 合法玩法。bridge-active-window-ms：搭完停止放置该时间后豁免自动
+    # 失效，防永久豁免掩盖作弊。bridge-min-move：慢速搭路（边走边放）兜底阈值。
+    bridge-window-ms: 150
+    bridge-min-placements: 2
+    bridge-active-window-ms: 500
+    bridge-min-move: 0.05
     grid-max-age-ms: 250
     sim-speed:
       enabled: true
@@ -321,10 +361,29 @@ checks:
       enabled: true
       vertical-tolerance: 0.02
       vl-before-flag: 10
+      # 放置方块豁免：1.8 客户端放置方块会产生微小垂直位移（方块与玩家碰撞微调，
+      # 如放脚下被顶起 ~0.08），引擎无此模型 → 放置后短暂豁免（限微小位移防掩盖飞行）。
+      place-exempt-ms: 500
+      place-max-dy: 0.2
       strict:
         vertical-tolerance: 0.01
+  # P2-1 移动穿墙（对齐 Grim Phase）：玩家 AABB 与实心方块盒重叠 = 客户端绕过
+  # 碰撞解析（NoClip/Phase/卡墙）。网格缺失/传送/挖掘/活塞邻域全豁免，
+  # 穿透深度 + 连续 streak + VL 三重缓冲防误判。
+  phase:
+    enabled: true
+    kick-at-vl: 15
+    kick-message: "&cKicked for Phase"
+    min-penetration: 0.05
+    streak: 2
+    teleport-exempt-ms: 1000
+    dig-exempt-ms: 500
+    piston-expand: 1
+    vl-before-flag: 3
+  # P1-3 与 heuristic-soft 配套开启：作为启发式子项的交叉验证信号源。
+  # 统计层（熵/峰度/IQR/KS）误判低，vl-before-flag 6 + kick 20 双重缓冲。
   aimstat:
-    enabled: false
+    enabled: true
     kick-at-vl: 20
     kick-message: "&cKicked for AimStat"
     entropy-max: 1.5
@@ -353,8 +412,9 @@ checks:
     long-threshold: 30
     min-categories: 2
     vl-before-flag: 3
+  # @Deprecated 经验公式（P0-2）：sim-fly 已覆盖上升/悬浮检测，关闭避免双判。
   fly:
-    enabled: true
+    enabled: false
     kick-at-vl: 20
     kick-message: "&cKicked for Fly"
     rise:
@@ -490,3 +550,11 @@ blink:
         min-burst-packets: 8
         max-interval-ms: 25
         vl-before-flag: 6
+      # P2-3 Blink 包序扩展：交互包（攻击/放置/挖掘）持续到达但移动包断流 =
+      # 只囤移动包的选择性 Blink。原版 1.8 有 20-tick 位置心跳（静止也每秒发
+      # POSITION），min-silence 1500ms > 心跳周期 1000ms → 正常客户端永不命中。
+      interact-silence:
+        enabled: true
+        min-silence-ms: 1500
+        interact-live-ms: 300
+        vl-before-flag: 3

@@ -70,6 +70,7 @@ public final class BlinkCheck extends Check {
             }
         }
         if (silence <= maxSilence) {
+            checkInteractSilence(data, now, silence);
             return;
         }
         if (now - data.lastBlinkFlagTime < si("cooldown-ms", 5000, 3000)) {
@@ -79,6 +80,39 @@ public final class BlinkCheck extends Check {
         if (bump(data, "blink", 1D, i("vl-before-flag", 2))) {
             flag(data, "Blink", (livePong ? "silent=" : "no packet for ") + silence + "ms"
                     + (livePong ? " with live pong" : ""));
+        }
+    }
+
+    /**
+     * P2-3 Blink 包序扩展（对齐 Grim PacketOrder* 场景之一）：交互包活着
+     * （攻击/放置/挖掘持续到达）但移动包断流 = 只囤移动包的选择性 Blink。
+     *
+     * <p>安全性：原版 1.8 客户端有 20-tick 位置心跳（静止也每秒强制发 POSITION），
+     * 阈值取心跳周期的 1.5 倍（1500ms）确保正常客户端永不命中；交互活跃窗口取
+     * 300ms（两次攻击/放置间隔内），要求交互密集才计数。静止站桩玩家位置心跳
+     * 每 1000ms 刷新 lastPositionMillis → silence 永远到不了阈值。</p>
+     */
+    private void checkInteractSilence(PlayerData data, long now, long silence) {
+        if (!isSubEnabled("interact-silence")) {
+            return;
+        }
+        if (data.lastInteractMillis <= 0L) {
+            return;
+        }
+        long interactLive = si("interact-silence.interact-live-ms", 300, 300);
+        if (now - data.lastInteractMillis > interactLive) {
+            return; // 交互也停了：整体断流，交给核心判定
+        }
+        long minSilence = si("interact-silence.min-silence-ms", 1500, 1200);
+        if (silence < minSilence) {
+            return;
+        }
+        if (now - data.lastBlinkFlagTime < si("cooldown-ms", 5000, 3000)) {
+            return;
+        }
+        data.lastBlinkFlagTime = now;
+        if (bump(data, "blink-interact", 1D, i("interact-silence.vl-before-flag", 3))) {
+            flag(data, "BlinkInteract", "interact alive but no move for " + silence + "ms");
         }
     }
 }

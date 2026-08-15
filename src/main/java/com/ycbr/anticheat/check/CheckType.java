@@ -22,6 +22,7 @@ public enum CheckType {
     FASTCLICK("FastClick", "fastclick"),
     REACH("Reach", "reach"),
     SIMULATION("Simulation", "simulation"),
+    PHASE("Phase", "phase"),
     AIMSTAT("AimStat", "aimstat"),
     IMPROBABLE("Improbable", "improbable");
 

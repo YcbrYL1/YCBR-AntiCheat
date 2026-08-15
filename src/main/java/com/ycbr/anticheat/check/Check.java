@@ -59,6 +59,14 @@ public abstract class Check {
     protected void onLook(PlayerData data, boolean onGround) {
     }
 
+    /**
+     * 纯 LOOK 包（PacketPlayInLook，无位置字段）到达。与 {@link #onLook} 不同：
+     * 后者只在 onGround=true 时触发（NoFall 语义）；本钩子每个 LOOK 包都触发，
+     * 供"LOOK 包流"检测（如 DupLook：原版 1.8 仅在旋转变化时才发 LOOK 包）。
+     */
+    protected void onLookPacket(PlayerData data, float yaw, float pitch) {
+    }
+
     protected void onBlockDigStart(PlayerData data) {
     }
 

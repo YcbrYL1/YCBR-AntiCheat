@@ -549,6 +549,188 @@ public final class PredictionEngine {
                 Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
     }
 
+    // ------------------------------------------------------------------
+    // candidatesMultiTickWithCollision（P0-3：多 tick 碰撞重演）
+    // ------------------------------------------------------------------
+
+    /**
+     * 多 tick 候选 + 逐 tick 碰撞重演（P0-3）。
+     *
+     * <p>与 {@link #candidatesMultiTick} 的差异：不再把累计位移一次性套墙距截断 +
+     * √ticks 容差兜底，而是每 tick 用上一 tick 解析后的落点作为起点，经
+     * {@link CollisionResolver#resolve} 做 AABB 逐轴解析（面距截断/台阶步进/落地/
+     * 撞顶），累加解析后位移并推进状态：携带动量取解析后增量（撞墙轴不为零而取
+     * 面距——比 NMS 碰撞清零略大，过预测方向安全）；落地/步进 → ground=true、
+     * motY=0；空中 → 标准 (ΔY-0.08)*0.98 推进。高 ping 玩家在台阶/转角/墙边不再
+     * 依赖墙距近似，与 Grim 的逐 tick 重演对齐。</p>
+     *
+     * <p>任一 tick 网格不足（越界/未知格，快跑 3-4 tick 可能移出 ±2 格覆盖）→
+     * 返回 {@code null}，调用方回退墙距路径，零误判兜底。</p>
+     *
+     * @param px 起始脚底 X（shadow 位置）
+     * @param py 起始脚底 Y
+     * @param pz 起始脚底 Z
+     */
+    public static Candidate[] candidatesMultiTickWithCollision(
+            double motionX, double motionZ, double motionY,
+            boolean onGround, float yaw, double frictionFactor,
+            boolean sprinting, double speedLevel, double jumpLevel, int ticks,
+            boolean inLiquid, boolean inWeb, boolean onLadder, boolean headBlocked,
+            boolean usingItem, double px, double py, double pz, VoxelGrid grid) {
+
+        if (grid == null) {
+            return null;
+        }
+        if (ticks <= 1) {
+            return candidatesWithCollision(motionX, motionY, motionZ, onGround, yaw, frictionFactor,
+                    sprinting, speedLevel, jumpLevel, inLiquid, inWeb, onLadder, headBlocked,
+                    usingItem, px, py, pz, grid);
+        }
+
+        List<Candidate> list = new ArrayList<Candidate>();
+        double[] speedFactors = {0.0, 1.0, SPRINT_MODIFIER, SNEAK_FACTOR};
+        String[] speedLabels = {"idle", "walk", "sprint", "sneak"};
+        double[] strafes = {0.0, -1.0, 1.0};
+
+        for (int s = 0; s < speedFactors.length; s++) {
+            for (int jumpAttempt = 0; jumpAttempt <= 1; jumpAttempt++) {
+                boolean jumpOnTick0 = (jumpAttempt == 1) && onGround;
+                boolean sprintRow = speedFactors[s] == SPRINT_MODIFIER;
+                double factor = speedFactors[s];
+
+                double motX = motionX;
+                double motZ = motionZ;
+                double motY = motionY;
+                boolean ground = onGround;
+
+                for (int st = 0; st < strafes.length; st++) {
+                    double cx = px;
+                    double cy = py;
+                    double cz = pz;
+                    double totalDX = 0.0;
+                    double totalDZ = 0.0;
+                    double totalDY = 0.0;
+
+                    for (int t = 0; t < ticks; t++) {
+                        double hFriction = ground ? frictionFactor * AIR_FRICTION : AIR_FRICTION;
+                        if (inLiquid) {
+                            hFriction = LIQUID_DRAG;
+                        }
+                        motX *= hFriction;
+                        motZ *= hFriction;
+
+                        boolean jumpedTick = (t == 0 && jumpOnTick0 && !inLiquid && !onLadder && !inWeb);
+                        if (jumpedTick) {
+                            motY = JUMP_VELOCITY + jumpLevel * PhysicsConstants.JUMP_POTION_PER_LEVEL;
+                            if (headBlocked) {
+                                motY = Math.min(motY, HEAD_BLOCKED_JUMP_CAP);
+                            }
+                            double rad = yaw * Math.PI / 180.0;
+                            motX -= Math.sin(rad) * SPRINT_JUMP_IMPULSE;
+                            motZ += Math.cos(rad) * SPRINT_JUMP_IMPULSE;
+                            ground = false;
+                        }
+
+                        double f6 = ACCEL_FACTOR / (hFriction * hFriction * hFriction);
+                        double baseSpeed = (BASE_SPEED + SPEED_POTION_PER_LEVEL * speedLevel)
+                                * (sprintRow ? SPRINT_MODIFIER : 1.0);
+                        double inputSpeed;
+                        if (inLiquid) {
+                            inputSpeed = baseSpeed * ((ground && sprintRow) ? PhysicsConstants.LIQUID_GROUND_SPRINT_FACTOR : LIQUID_INPUT_FACTOR);
+                        } else if (ground) {
+                            inputSpeed = baseSpeed * f6;
+                        } else {
+                            inputSpeed = AIR_ACCEL;
+                        }
+                        inputSpeed *= factor;
+                        if (usingItem) {
+                            inputSpeed *= USING_ITEM_FACTOR;
+                        }
+
+                        double fwd = 1.0;
+                        double strafe = strafes[st];
+                        double f3 = Math.max(1.0, Math.sqrt(fwd * fwd + strafe * strafe));
+                        f3 = inputSpeed / f3;
+                        double sinYaw = Math.sin(yaw * Math.PI / 180.0);
+                        double cosYaw = Math.cos(yaw * Math.PI / 180.0);
+                        motX += (fwd * f3) * cosYaw - (strafe * f3) * sinYaw;
+                        motZ += (strafe * f3) * cosYaw + (fwd * f3) * sinYaw;
+
+                        if (inWeb) {
+                            motX *= WEB_DAMP;
+                            motY *= WEB_DAMP;
+                            motZ *= WEB_DAMP;
+                        }
+                        if (onLadder) {
+                            motY = LADDER_CLIMB;
+                        } else if (!jumpedTick) {
+                            if (ground) {
+                                motY = 0.0;
+                            } else if (inLiquid && jumpAttempt == 1) {
+                                motY += LIQUID_SWIM_UP;
+                            }
+                        }
+
+                        CollisionResolver.Resolution res = CollisionResolver.resolve(
+                                cx, cy, cz, motX, motY, motZ, grid);
+                        if (res == null) {
+                            return null; // 任一 tick 网格不足 → 整路径回退墙距
+                        }
+
+                        totalDX += res.dx;
+                        totalDZ += res.dz;
+                        totalDY += res.dy;
+                        cx += res.dx;
+                        cy += res.dy;
+                        cz += res.dz;
+
+                        // 状态推进：携带动量取解析后增量（过预测方向）；落地/步进归地。
+                        motX = res.dx;
+                        motZ = res.dz;
+                        if (res.hitGround || res.stepped) {
+                            ground = true;
+                            motY = 0.0;
+                        } else if (ground && Math.abs(res.dy) <= 1e-9
+                                && !jumpedTick && !inLiquid && !onLadder && !inWeb) {
+                            // 原贴地且本 tick 垂直位移为 0：验证脚下支撑后保持贴地
+                            // （持续行走走地面摩擦/加速度——旧路径每 tick 切空中物理，
+                            // 摩擦 0.91 系统性偏差）；走出边缘 → 转空中重力接管。
+                            double surf = CollisionResolver.standingSurface(cx, cy, cz, grid);
+                            if (surf == -1.0) {
+                                ground = false;
+                                motY = (res.dy - GRAVITY) * VERTICAL_DRAG;
+                            } else {
+                                // 有支撑（surf>=0）或网格未知（NaN）：贴地过预测，安全
+                                ground = true;
+                                motY = 0.0;
+                            }
+                        } else {
+                            ground = false;
+                            if (onLadder) {
+                                motY = LADDER_CLIMB;
+                            } else if (inLiquid) {
+                                motY = motY * LIQUID_DRAG - LIQUID_GRAVITY;
+                            } else {
+                                motY = (res.dy - GRAVITY) * VERTICAL_DRAG;
+                            }
+                        }
+                    }
+
+                    list.add(new Candidate(totalDX, totalDZ, totalDY,
+                            speedLabels[s] + (jumpOnTick0 ? "+jump" : "") + "x" + ticks
+                                    + "+strafe=" + (int) strafes[st] + "+grid"));
+
+                    // 重置状态以进行下一个 strafe 方向的完整模拟
+                    motX = motionX;
+                    motZ = motionZ;
+                    motY = motionY;
+                    ground = onGround;
+                }
+            }
+        }
+        return list.toArray(new Candidate[0]);
+    }
+
     /** 带墙距的多 tick 候选（累计位移套 {@link #applyCollision}）。 */
     public static Candidate[] candidatesMultiTick(
             double motionX, double motionZ, double motionY,

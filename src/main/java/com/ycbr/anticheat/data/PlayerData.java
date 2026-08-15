@@ -202,6 +202,28 @@ public final class PlayerData {
     public volatile long lastBurstExceedMs;
     public volatile long lastDigStartTime;
     public volatile int modulo360Streak;
+    // ---- DupLook（P1-1 硬检测：纯 LOOK 包旋转与上一包完全相同）----
+    // 独立于 prevYaw/prevPitch（那是"任意旋转包"状态，DupLook 只跟 LOOK 包流）。
+    public volatile boolean dupLookHasPrev;
+    public volatile float dupLookYaw;
+    public volatile float dupLookPitch;
+    public volatile int dupLookStreak;
+    // ---- Phase（P2-1 移动穿墙）：连续穿透计数 ----
+    public volatile int phaseStreak;
+    // ---- Blink 包序扩展（P2-3）：最近一次交互包（攻击/放置/挖掘）到达时刻 ----
+    public volatile long lastInteractMillis;
+    // ---- 放置方块时刻（DupLook/sim-fly 放置豁免）：1.8 客户端放置方块会发重复
+    // LOOK 包并产生微小垂直位移（方块与玩家碰撞微调），引擎无此模型 → 放置后豁免 ----
+    public volatile long lastPlaceTime;
+    // ---- 搭路活跃（放方块豁免）：短窗口内连续放置（搭路指纹）时，sim-speed/sim-fly
+    // 完全豁免——搭路玩家在刚放下的方块上走/跳，水平碰撞微调 + 网格异步不匹配 + 垂直
+    // 位移大，单次放置豁免（限小位移）不适用。由 ScaffoldCheck.onPlace 无条件维护。
+    public volatile int bridgePlaceStreak;
+    public volatile long lastBridgePlaceTime;
+    // ---- Velocity 冗余去重（P2-4）：上次 ENTITY_VELOCITY 包向量（set 语义差值修正）----
+    public volatile double lastKbVx;
+    public volatile double lastKbVy;
+    public volatile double lastKbVz;
     public volatile long lastThrowTime;
     public volatile int fastThrowCount;
     public volatile long lastFastThrowFlagTime;

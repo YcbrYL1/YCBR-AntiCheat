@@ -306,7 +306,8 @@ public final class MainThreadHandler implements Runnable {
         for (int by = oy - VoxelGrid.RANGE_Y_BELOW; by <= oy + VoxelGrid.RANGE_Y_ABOVE; by++) {
             for (int bz = oz - VoxelGrid.RANGE_XZ; bz <= oz + VoxelGrid.RANGE_XZ; bz++) {
                 for (int bx = ox - VoxelGrid.RANGE_XZ; bx <= ox + VoxelGrid.RANGE_XZ; bx++) {
-                    int flags = flagsForMaterial(player.getWorld().getBlockAt(bx, by, bz).getType());
+                    Block block = player.getWorld().getBlockAt(bx, by, bz);
+                    int flags = flagsForBlock(block);
                     if (flags != 0) {
                         grid.setFlag(bx, by, bz, flags);
                     }
@@ -314,6 +315,53 @@ public final class MainThreadHandler implements Runnable {
             }
         }
         data.voxelGrid = grid;
+    }
+
+    private int flagsForBlock(Block block) {
+        Material m = block == null ? null : block.getType();
+        if (m == null) {
+            return 0;
+        }
+        // 门类（PhaseCheck 前置修复）：isSolid() 按方块类型静态返回 true，
+        // 开着的门/栅栏门照样标 SOLID → 开门穿过被误判穿墙/截断。
+        // data bit 0x4 = open：开 → 无碰撞（0）；关 → SOLID（站立高度 = 格顶，正确）。
+        // 活板门关闭时盒厚 0.1875，SOLID(1.0) 会误判站活板门玩家 → 一律 0（过预测方向安全）。
+        if (isDoorMaterial(m)) {
+            return (block.getData() & 0x4) != 0 ? 0 : VoxelGrid.SOLID;
+        }
+        if (isTrapDoorMaterial(m)) {
+            return 0;
+        }
+        if (m == Material.SOUL_SAND) {
+            return VoxelGrid.SOUL;
+        }
+        return flagsForMaterial(m);
+    }
+
+    private static boolean isDoorMaterial(Material m) {
+        switch (m) {
+        case WOODEN_DOOR:
+        case IRON_DOOR:
+        case SPRUCE_DOOR:
+        case BIRCH_DOOR:
+        case JUNGLE_DOOR:
+        case ACACIA_DOOR:
+        case DARK_OAK_DOOR:
+        case FENCE_GATE:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    private static boolean isTrapDoorMaterial(Material m) {
+        switch (m) {
+        case TRAP_DOOR:
+        case IRON_TRAPDOOR:
+            return true;
+        default:
+            return false;
+        }
     }
 
     private int flagsForMaterial(Material m) {

@@ -13,9 +13,11 @@ import com.ycbr.anticheat.simulation.VoxelGrid;
 import com.ycbr.anticheat.simulation.WorldProbe;
 
 /**
- * 预测引擎检测（初级版 Grim）。默认关闭，稳定后可切换。
+ * 预测引擎检测（初级版 Grim）。默认开启（P0-1），配套关闭弃用启发式 Speed/Fly/NoFall。
  * sim-speed：水平位移模长超过全部合法候选的上界 → 加速；
  * sim-fly：垂直位移偏离全部合法候选 → 上升过快/悬浮。
+ * 单 tick 与多 tick（高 ping）路径均优先 AABB 碰撞重演（VoxelGrid + CollisionResolver），
+ * 网格缺失/过期/越界自动回退旧墙距路径。
  */
 public final class SimulationCheck extends Check {
 
@@ -91,12 +93,28 @@ public final class SimulationCheck extends Check {
                         probe.wallFwd, probe.wallLeft, probe.wallRight);
             }
         } else if (ticks > 1) {
-            cands = PredictionEngine.candidatesMultiTick(
-                    shadow.motionX, shadow.motionZ, shadow.motionY,
-                    shadow.onGround, yaw, frictionFactor,
-                    sprinting, speedLevel, jumpLevel, ticks,
-                    probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
-                    probe.wallFwd, probe.wallLeft, probe.wallRight);
+            // P0-3：多 tick 也优先碰撞重演（逐 tick AABB 解析，落点推进）；
+            // 网格不足（快跑移出覆盖）→ null 回退旧墙距路径。
+            PredictionEngine.Candidate[] g = null;
+            if (grid != null) {
+                g = PredictionEngine.candidatesMultiTickWithCollision(
+                        shadow.motionX, shadow.motionZ, shadow.motionY,
+                        shadow.onGround, yaw, frictionFactor,
+                        sprinting, speedLevel, jumpLevel, ticks,
+                        probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                        shadow.posX, shadow.posY, shadow.posZ, grid);
+            }
+            if (g != null) {
+                cands = g;
+                gridPath = true;
+            } else {
+                cands = PredictionEngine.candidatesMultiTick(
+                        shadow.motionX, shadow.motionZ, shadow.motionY,
+                        shadow.onGround, yaw, frictionFactor,
+                        sprinting, speedLevel, jumpLevel, ticks,
+                        probe.inLiquid, probe.inWeb, probe.onLadder, probe.headBlocked, false,
+                        probe.wallFwd, probe.wallLeft, probe.wallRight);
+            }
         } else {
             cands = PredictionEngine.candidates(
                     shadow.motionX, shadow.motionY, shadow.motionZ,
@@ -110,6 +128,24 @@ public final class SimulationCheck extends Check {
         double actualDY = ctx.y - shadow.posY;
         double actualDZ = ctx.z - shadow.posZ;
         double actualH = Math.hypot(actualDX, actualDZ);
+
+        // 搭路豁免：最近放置 + 正在移动（边走边放）或短窗口内 ≥N 次连续放置（快速搭路）
+        // → sim-speed 与 sim-fly 完全豁免。搭路玩家在刚放下的方块上走/跳，水平碰撞微调 +
+        // 体素网格异步采集不匹配 + 垂直位移大（可能 >0.2m），单次放置豁免不适用。
+        // 搭路是 1.8 合法玩法，且真正的 speed/fly 作弊在搭路时仍被其他检测覆盖 → 无漏网风险。
+        // 关键：附"最近放置新鲜度"窗口——搭完停止放置后豁免自动失效，避免永久豁免掩盖作弊。
+        // 慢速搭路（1 格/秒）streak 达不到阈值 → 用"有放置 + 有水平位移"兜底（边走边放）。
+        boolean bridgeActive = data.lastBridgePlaceTime > 0L
+                && ctx.arrivalTime - data.lastBridgePlaceTime
+                <= i("bridge-active-window-ms", 500)
+                && (data.bridgePlaceStreak >= i("bridge-min-placements", 2)
+                    || actualH > d("bridge-min-move", 0.05D));
+        if (bridgeActive) {
+            drain(data, "sim-speed", 0.05D);
+            drain(data, "sim-fly", 0.05D);
+            resyncShadow(shadow, ctx, yaw, probe, sprinting, sneaking, speedLevel, jumpLevel);
+            return;
+        }
 
         double hTol = sd("sim-speed.horizontal-tolerance", 0.01D, 0.005D);
         double vTol = sd("sim-fly.vertical-tolerance", 0.02D, 0.01D);
@@ -195,7 +231,14 @@ public final class SimulationCheck extends Check {
                 && WorldProbe.stepVerticalAllowed(actualDY, data.blockOnStairsOrSlab);
         // 粘液块弹跳豁免：1.8 粘液块落地反弹 |dy| 可达 ~0.63，引擎无弹跳模型。
         boolean slimeBounce = WorldProbe.slimeBounceAllowed(actualDY, data.blockOnSlime);
-        boolean vMatch = bestVDist <= vTol || stepUp || slimeBounce;
+        // 放置方块豁免：1.8 客户端放置方块会产生微小垂直位移（方块与玩家
+        // 碰撞微调，如放脚下被顶起 ~0.08），引擎无此模型 → 放置后短暂豁免。
+        // 限微小位移（place-max-dy）防掩盖真正的飞行作弊。搭路（高频放置）已由
+        // 上方 bridgeActive 完全豁免，这里只兜底单次/低频放置。
+        boolean placeExempt = ctx.arrivalTime - data.lastPlaceTime
+                < i("sim-fly.place-exempt-ms", 500)
+                && Math.abs(actualDY) < d("sim-fly.place-max-dy", 0.2D);
+        boolean vMatch = bestVDist <= vTol || stepUp || slimeBounce || placeExempt;
         if (vMatch) {
             drain(data, "sim-fly", 0.05D);
         } else {

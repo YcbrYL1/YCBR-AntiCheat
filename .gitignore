@@ -21,3 +21,6 @@ sessions.yml
 botchecks.yml
 bans.yml
 config.yml
+
+# Internal analysis / plan docs (not for public repo)
+plans/
